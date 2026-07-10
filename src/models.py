@@ -79,6 +79,16 @@ class UpdateResult:
 
 
 @dataclass
+class MaintenanceCycleResult:
+    """Result of a complete maintenance cycle."""
+
+    success: bool
+    update_result: UpdateResult | None = None
+    duration_seconds: float = 0.0
+    error_message: str | None = None
+
+
+@dataclass
 class StateTransitionEvent:
     """Records a state transition for logging and auditing."""
 

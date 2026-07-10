@@ -13,6 +13,7 @@ from src.config import WrapperConfig
 from src.connection_listener import ConnectionListener
 from src.idle_timer import IdleTimer
 from src.logger import WrapperLogger
+from src.maintenance_timer import MaintenanceTimer
 from src.models import (
     RestartResult,
     ServerState,
@@ -24,6 +25,7 @@ from src.models import (
 from src.process_manager import ProcessManager
 from src.rcon_client import RconClient
 from src.settings_parser import SettingsParser
+from src.steam_updater import SteamUpdater
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +68,17 @@ class WrapperCore:
             on_packet_received=self._on_udp_packet_received,
             port=config.game_port,
         )
+        self._maintenance_timer = MaintenanceTimer(
+            interval_seconds=config.maintenance_interval_seconds,
+            broadcast_lead_seconds=config.maintenance_broadcast_lead_seconds,
+            on_broadcast_due=self._handle_broadcast_due,
+            on_maintenance_due=self._handle_maintenance_due,
+        )
+        self._steam_updater = SteamUpdater(
+            steamcmd_path=config.steamcmd_path,
+            install_dir=config.steam_app_install_dir,
+        )
+        self._maintenance_in_progress: bool = False
 
     @property
     def state(self) -> ServerState:
@@ -398,6 +411,26 @@ class WrapperCore:
             server_pid=self._process_manager.get_pid(),
             uptime_seconds=uptime,
         )
+
+    # -------------------------------------------------------------------------
+    # Maintenance callbacks (placeholders - implemented in task 5.2)
+    # -------------------------------------------------------------------------
+
+    async def _handle_broadcast_due(self) -> None:
+        """Handle the maintenance broadcast timer firing.
+
+        Sends a warning message to connected players that maintenance is
+        approaching. Implemented in task 5.2.
+        """
+        pass
+
+    async def _handle_maintenance_due(self) -> None:
+        """Handle the maintenance timer firing.
+
+        Orchestrates the full maintenance cycle: stop, update, restart.
+        Implemented in task 5.2.
+        """
+        pass
 
     # -------------------------------------------------------------------------
     # Private helpers
