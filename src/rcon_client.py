@@ -61,7 +61,9 @@ class RconClient:
             )
 
         try:
-            response = await asyncio.to_thread(self._client.run, "ShowPlayers")
+            response = await asyncio.to_thread(
+                self._client.run, "ShowPlayers", enforce_id=False
+            )
             player_count = self._parse_player_response(response)
             return RconQueryResult(success=True, player_count=player_count)
         except Exception as e:
