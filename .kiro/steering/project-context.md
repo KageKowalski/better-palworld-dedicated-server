@@ -22,11 +22,12 @@ The wrapper is a **state machine** with four states:
 | `src/rcon_client.py` | RCON queries for player count |
 | `src/idle_timer.py` | Countdown timer that triggers shutdown |
 | `src/settings_parser.py` | PalWorldSettings.ini read/write/validate (handles string quoting on write/read) |
-| `src/management_interface.py` | Interactive CLI (stdin commands), input validation/auto-correction, password masking |
+| `src/management_interface.py` | Interactive CLI (stdin commands), input validation/auto-correction, password masking, `CorrectionResult` dataclass |
 | `src/logger.py` | Rotating file logger |
 | `src/config.py` | Configuration dataclass |
 | `src/models.py` | Shared enums, result types, status types |
 | `src/main.py` | Entry point, argparse, wiring |
+| `src/__main__.py` | Enables `python -m src` invocation |
 
 ## Key Design Decisions
 
