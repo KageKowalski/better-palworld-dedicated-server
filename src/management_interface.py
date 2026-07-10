@@ -27,6 +27,8 @@ from src.wrapper_core import WrapperCore
 
 logger = logging.getLogger(__name__)
 
+PASSWORD_MASK = "********"
+
 
 class ManagementInterface:
     """CLI management interface running on the asyncio event loop.
@@ -224,6 +226,17 @@ class ManagementInterface:
         status = self._wrapper_core.get_status()
         await self.display_status(status)
 
+    def _is_password_setting(self, key: str) -> bool:
+        """Check if a setting key is a password field.
+
+        Args:
+            key: The setting key name to check.
+
+        Returns:
+            True when key contains the substring "Password" (case-sensitive).
+        """
+        return "Password" in key
+
     async def _cmd_settings(self) -> None:
         """Handle the 'settings' command."""
         settings = self._settings_parser.read_settings(self._config.settings_file_path)
@@ -239,7 +252,8 @@ class ManagementInterface:
         await self.display_message("Current Server Settings:")
         await self.display_message("-" * 40)
         for key, value in sorted(settings.items()):
-            await self.display_message(f"  {key} = {value}")
+            display_value = PASSWORD_MASK if self._is_password_setting(key) else value
+            await self.display_message(f"  {key} = {display_value}")
 
     async def _cmd_set(self, parts: list[str]) -> None:
         """Handle the 'set <key> <value>' command.
