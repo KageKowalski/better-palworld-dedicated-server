@@ -7,9 +7,9 @@ A Python wrapper that sits around the Palworld Dedicated Server (`PalServer.exe`
 ## Architecture Overview
 
 The wrapper is a **state machine** with four states:
-- **MONITORING** — Server stopped, UDP listener active on port 8211
-- **STARTING** — Server launching, waiting for port readiness (120s timeout)
-- **RUNNING** — Server active, RCON polling for player count, idle timer tracking
+- **MONITORING** — Server stopped, UDP listener active on port 8211 (retries bind with exponential backoff on transient OS errors)
+- **STARTING** — Server launching, waiting for RCON TCP port 25575 readiness (120s timeout)
+- **RUNNING** — Server active, RCON polling for player count (initial connection retries with backoff), idle timer tracking
 - **STOPPING** — Graceful shutdown in progress (30s timeout before force kill)
 
 ## Component Map
@@ -34,6 +34,8 @@ The wrapper is a **state machine** with four states:
 2. **Callbacks over events** — Components notify WrapperCore via callbacks rather than a pub/sub system
 3. **Result types over exceptions** — Expected failures return dataclasses; only unexpected errors raise
 4. **UDP bind-and-release** — The wrapper binds the game port to detect connections, then releases it so the server can bind
+5. **RCON port for readiness detection** — Server readiness is checked by TCP-connecting to the RCON port (25575), not the game UDP port (8211), since TCP probes work reliably and RCON availability means the server is fully initialized
+6. **Retry with backoff** — UDP port binding and RCON initial connection both use retry loops with exponential backoff to handle transient failures (OS socket cleanup delays, slow server initialization)
 
 ## External Dependencies
 

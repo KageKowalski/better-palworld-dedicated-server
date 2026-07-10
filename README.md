@@ -71,9 +71,9 @@ Once running, the wrapper presents a `>` prompt:
 
 ## How It Works
 
-1. The wrapper starts in **monitoring mode**, listening for UDP traffic on the game port.
-2. When a player connects, it releases the port, launches `PalServer.exe`, and waits for it to be ready.
-3. While running, it polls RCON for player count every few seconds.
+1. The wrapper starts in **monitoring mode**, listening for UDP traffic on the game port (retries binding with backoff if the port isn't immediately available).
+2. When a player connects, it releases the port, launches `PalServer.exe`, and waits for the RCON TCP port (25575) to become available — a reliable signal that the server is fully initialized.
+3. While running, it connects to RCON (with retry/backoff if the server is slow to initialize) and polls for player count every few seconds.
 4. When the last player leaves, a 10-minute idle timer starts.
 5. If no one rejoins before the timer expires, the server shuts down and the wrapper resumes monitoring.
 

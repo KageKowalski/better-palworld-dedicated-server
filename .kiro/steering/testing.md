@@ -32,6 +32,8 @@ python -m pytest tests/property/ -v # Property tests only
 - Async tests: use `async def test_*` methods inside classes — pytest-asyncio handles the event loop
 - Property tests use `@settings(max_examples=100)` minimum
 - Each property test file includes a comment referencing the design property number
+- For bugfixes: write exploration tests (expected to fail on unfixed code) and preservation tests (must pass before and after fix) — see `tests/property/test_bug_conditions.py` and `tests/property/test_preservation.py` for examples
+- Use `deadline=None` in hypothesis settings for async tests that involve mocked `asyncio.sleep` or network I/O
 
 ## What to Test
 
