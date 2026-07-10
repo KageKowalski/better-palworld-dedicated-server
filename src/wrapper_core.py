@@ -146,22 +146,22 @@ class WrapperCore:
             await self._connection_listener.start_listening()
             return
 
-        # Wait for the server to be ready on the game port
+        # Wait for the server RCON port to be ready (reliable TCP indicator)
         port_ready = await self._process_manager.wait_for_port(
-            port=self._config.game_port,
+            port=self._config.rcon_port,
             timeout=self._config.start_timeout_seconds,
         )
 
         if not port_ready:
             logger.error(
-                "Server failed to listen on port %d within %ds",
-                self._config.game_port,
+                "Server RCON not ready on port %d within %ds",
+                self._config.rcon_port,
                 self._config.start_timeout_seconds,
             )
             self._logger.log_error(
                 "Server startup timeout",
                 Exception(
-                    f"Server not listening on port {self._config.game_port} "
+                    f"Server RCON not ready on port {self._config.rcon_port} "
                     f"within {self._config.start_timeout_seconds}s"
                 ),
             )
@@ -257,15 +257,16 @@ class WrapperCore:
             await self._connection_listener.start_listening()
             return result
 
-        # Wait for port readiness
+        # Wait for RCON port readiness (reliable TCP indicator)
         port_ready = await self._process_manager.wait_for_port(
-            port=self._config.game_port,
+            port=self._config.rcon_port,
             timeout=self._config.start_timeout_seconds,
         )
 
         if not port_ready:
             error_msg = (
-                f"Server did not become ready within {self._config.start_timeout_seconds}s"
+                f"Server RCON not ready on port {self._config.rcon_port} "
+                f"within {self._config.start_timeout_seconds}s"
             )
             logger.error(error_msg)
             await self._process_manager.stop_server(
@@ -461,10 +462,33 @@ class WrapperCore:
         # Give the server a moment to initialize RCON
         await asyncio.sleep(2)
 
-        # Attempt initial RCON connection
-        connected = await self._rcon_client.connect()
-        if not connected:
-            logger.warning("Initial RCON connection failed, will retry on next poll")
+        # Attempt initial RCON connection with retry and backoff
+        max_attempts = 5
+        delays = [2, 4, 8, 16, 30]  # seconds between retries
+        connected = False
+
+        for attempt in range(1, max_attempts + 1):
+            if self._state != ServerState.RUNNING:
+                logger.debug("State changed during RCON connect retry, aborting")
+                return
+
+            connected = await self._rcon_client.connect()
+            if connected:
+                break
+
+            if attempt < max_attempts:
+                delay = delays[attempt - 1]
+                logger.warning(
+                    "RCON connection attempt %d/%d failed, retrying in %ds...",
+                    attempt, max_attempts, delay,
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error(
+                    "RCON connection failed after %d attempts. "
+                    "Will continue polling with reconnect-on-failure fallback.",
+                    max_attempts,
+                )
 
         try:
             while self._state == ServerState.RUNNING:
