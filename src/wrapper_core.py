@@ -180,7 +180,10 @@ class WrapperCore:
     async def handle_idle_expired(self) -> None:
         """Handle the idle timer reaching its threshold.
 
-        Only acts if in RUNNING state. Initiates a graceful server shutdown.
+        Only acts if in RUNNING state. Schedules the graceful shutdown in a
+        separate task to avoid self-cancellation — stop_server() cancels the
+        idle timer task, so running stop_server from within that task would
+        abort the shutdown before the terminate signal is sent.
         """
         if self._state != ServerState.RUNNING:
             logger.debug(
@@ -190,7 +193,7 @@ class WrapperCore:
 
         logger.info("Idle timer expired, initiating graceful shutdown")
         self._logger.log_state_transition("running", "stopping (idle timeout)")
-        await self.stop_server()
+        asyncio.create_task(self.stop_server())
 
     async def handle_server_crashed(self) -> None:
         """Handle unexpected server process termination.
