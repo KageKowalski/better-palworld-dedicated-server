@@ -65,28 +65,44 @@ class ConnectionListener:
     async def start_listening(self) -> None:
         """Bind to the UDP port and begin listening for incoming packets.
 
-        Raises no exception if the port is already in use; instead logs the
-        error gracefully.
+        Retries up to 5 times with exponential backoff (1s, 2s, 4s, 8s, 16s)
+        if the port cannot be bound due to an OSError (e.g. port still held by
+        the OS after a recent release). Raises no exception; logs errors
+        gracefully.
         """
         if self._listening:
             logger.warning("Connection listener is already active")
             return
 
         loop = asyncio.get_running_loop()
-        try:
-            transport, _ = await loop.create_datagram_endpoint(
-                lambda: _UdpProtocol(self._on_packet_received),
-                local_addr=(self._host, self._port),
-            )
-            self._transport = transport
-            self._listening = True
-            logger.info("Connection listener started on %s:%d", self._host, self._port)
-        except OSError as e:
-            logger.error(
-                "Failed to bind UDP port %d: %s. Port may already be in use.",
-                self._port,
-                e,
-            )
+        max_attempts = 5
+        base_delay = 1.0  # seconds
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                transport, _ = await loop.create_datagram_endpoint(
+                    lambda: _UdpProtocol(self._on_packet_received),
+                    local_addr=(self._host, self._port),
+                )
+                self._transport = transport
+                self._listening = True
+                logger.info("Connection listener started on %s:%d", self._host, self._port)
+                return
+            except OSError as e:
+                if attempt < max_attempts:
+                    delay = base_delay * (2 ** (attempt - 1))  # 1, 2, 4, 8, 16
+                    logger.warning(
+                        "Failed to bind UDP port %d (attempt %d/%d): %s. "
+                        "Retrying in %.1fs...",
+                        self._port, attempt, max_attempts, e, delay,
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error(
+                        "Failed to bind UDP port %d after %d attempts: %s. "
+                        "Port may already be in use.",
+                        self._port, max_attempts, e,
+                    )
 
     async def stop_listening(self) -> None:
         """Stop listening and release the UDP port within 1 second."""
