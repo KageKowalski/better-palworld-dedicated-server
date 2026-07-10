@@ -46,7 +46,7 @@ The wrapper is a **state machine** with four states:
 
 - Game port: 8211 (UDP)
 - RCON port: 25575 (TCP)
-- Idle timeout: 600 seconds
+- Idle timeout: 300 seconds
 - Start timeout: 120 seconds
 - Stop timeout: 30 seconds
 - RCON poll interval: 10 seconds (valid range: 1–30)

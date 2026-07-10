@@ -22,7 +22,7 @@ class WrapperConfig:
     rcon_password: str = ""  # RCON admin password
 
     # Timing
-    idle_timeout_seconds: int = 600  # Seconds before idle shutdown
+    idle_timeout_seconds: int = 300  # Seconds before idle shutdown
     start_timeout_seconds: int = 120  # Max wait for server startup
     stop_timeout_seconds: int = 30  # Max wait for graceful shutdown
     rcon_poll_interval_seconds: int = 10  # Seconds between RCON queries

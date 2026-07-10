@@ -69,8 +69,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--idle-timeout",
         type=int,
-        default=600,
-        help="Idle timeout in seconds before shutdown (default: 600)",
+        default=300,
+        help="Idle timeout in seconds before shutdown (default: 300)",
     )
     parser.add_argument(
         "--poll-interval",
