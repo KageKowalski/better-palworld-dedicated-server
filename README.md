@@ -6,6 +6,7 @@ A lightweight wrapper that manages your Palworld Dedicated Server process on Win
 
 - **Auto-start on connect** — The wrapper listens on the game port. When a player tries to join, it launches the server automatically.
 - **Auto-shutdown on idle** — After 5 minutes (configurable) with no players connected, the server shuts down gracefully.
+- **Scheduled maintenance** — Automatically restarts the server at a configurable interval (default 6 hours), broadcasts a warning to players beforehand, and optionally updates the server via SteamCMD.
 - **Player monitoring** — Tracks connected players via RCON polling.
 - **CLI management** — Start, stop, restart, check status, and modify server settings from an interactive prompt.
 - **Settings editor** — View and modify `PalWorldSettings.ini` values with type/range validation, without editing the file by hand.
@@ -51,6 +52,10 @@ python -m src.main --server-exe <path> --settings-file <path> --rcon-password <p
 | `--rcon-port` | `25575` | RCON TCP port |
 | `--game-port` | `8211` | Game UDP port |
 | `--idle-timeout` | `300` | Seconds with 0 players before auto-shutdown |
+| `--maintenance-interval` | `21600` | Seconds between maintenance restarts (3600–86400) |
+| `--maintenance-broadcast-lead` | `300` | Seconds before restart to warn players (30–1800) |
+| `--steamcmd-path` | `""` | Path to `steamcmd.exe` (empty = skip updates) |
+| `--steam-app-install-dir` | `""` | Palworld server install directory for SteamCMD |
 | `--poll-interval` | `10` | Seconds between player count checks (1–30) |
 | `--log-file` | `wrapper.log` | Log file path |
 
@@ -76,6 +81,7 @@ Once running, the wrapper presents a `>` prompt:
 3. While running, it connects to RCON (with retry/backoff if the server is slow to initialize) and polls for player count every few seconds.
 4. When the last player leaves, a 5-minute idle timer starts.
 5. If no one rejoins before the timer expires, the server shuts down and the wrapper resumes monitoring.
+6. On a configurable interval (default 6 hours), the wrapper broadcasts a warning to players, stops the server, runs a SteamCMD update (if configured), and restarts — keeping the server fresh and up-to-date.
 
 > **Note:** The player whose connection triggers the auto-start will need to reconnect once the server finishes launching (roughly 1–2 minutes). The initial connection packet is consumed by the wrapper to detect intent — it cannot be forwarded to the server.
 
