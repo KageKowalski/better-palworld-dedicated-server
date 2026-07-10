@@ -139,7 +139,13 @@ class TestConnectionListenerErrorHandling:
         """Should not raise when port is already in use."""
         callback, _ = callback_tracker
         listener1 = ConnectionListener(on_packet_received=callback, port=19883)
-        listener2 = ConnectionListener(on_packet_received=callback, port=19883)
+        listener2 = ConnectionListener(
+            on_packet_received=callback,
+            port=19883,
+            max_bind_attempts=3,
+            bind_retry_base_delay=0.05,
+            bind_retry_max_delay=0.1,
+        )
         try:
             await listener1.start_listening()
             assert listener1.is_listening() is True
