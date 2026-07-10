@@ -69,6 +69,16 @@ class ValidationResult:
 
 
 @dataclass
+class UpdateResult:
+    """Result of a SteamCMD update attempt."""
+
+    success: bool
+    skipped: bool = False
+    error_message: str | None = None
+    timed_out: bool = False
+
+
+@dataclass
 class StateTransitionEvent:
     """Records a state transition for logging and auditing."""
 
