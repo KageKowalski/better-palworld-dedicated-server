@@ -21,8 +21,8 @@ The wrapper is a **state machine** with four states:
 | `src/process_manager.py` | Subprocess lifecycle (start/stop/crash detection) |
 | `src/rcon_client.py` | RCON queries for player count |
 | `src/idle_timer.py` | Countdown timer that triggers shutdown |
-| `src/settings_parser.py` | PalWorldSettings.ini read/write/validate |
-| `src/management_interface.py` | Interactive CLI (stdin commands) |
+| `src/settings_parser.py` | PalWorldSettings.ini read/write/validate (handles string quoting on write/read) |
+| `src/management_interface.py` | Interactive CLI (stdin commands), input validation/auto-correction, password masking |
 | `src/logger.py` | Rotating file logger |
 | `src/config.py` | Configuration dataclass |
 | `src/models.py` | Shared enums, result types, status types |
@@ -36,6 +36,8 @@ The wrapper is a **state machine** with four states:
 4. **UDP bind-and-release** — The wrapper binds the game port to detect connections, then releases it so the server can bind
 5. **RCON port for readiness detection** — Server readiness is checked by TCP-connecting to the RCON port (25575), not the game UDP port (8211), since TCP probes work reliably and RCON availability means the server is fully initialized
 6. **Retry with backoff** — UDP port binding and RCON initial connection both use retry loops with exponential backoff to handle transient failures (OS socket cleanup delays, slow server initialization)
+7. **Validation at the presentation layer** — Input validation and auto-correction lives in ManagementInterface (user-facing), while SettingsParser handles raw file I/O formatting
+8. **Password masking at display time** — Password values are stored unmasked in the file but displayed as `********` in the `settings` command output
 
 ## External Dependencies
 
@@ -46,7 +48,7 @@ The wrapper is a **state machine** with four states:
 
 - Game port: 8211 (UDP)
 - RCON port: 25575 (TCP)
-- Idle timeout: 600 seconds
+- Idle timeout: 300 seconds
 - Start timeout: 120 seconds
 - Stop timeout: 30 seconds
 - RCON poll interval: 10 seconds (valid range: 1–30)

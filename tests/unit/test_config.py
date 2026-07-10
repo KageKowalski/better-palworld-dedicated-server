@@ -40,7 +40,7 @@ class TestWrapperConfigDefaults:
         config = WrapperConfig(
             server_exe_path=Path("."), settings_file_path=Path(".")
         )
-        assert config.idle_timeout_seconds == 600
+        assert config.idle_timeout_seconds == 300
 
     def test_default_start_timeout(self):
         config = WrapperConfig(

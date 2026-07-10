@@ -26,7 +26,8 @@ python -m pytest tests/property/ -v # Property tests only
 ## Conventions
 
 - Test files mirror source: `src/config.py` → `tests/unit/test_config.py`
-- Group tests in classes by behavior area (e.g., `TestWrapperConfigValidation`)
+- Feature-specific test files group related tests: `tests/unit/test_management_interface.py` for ManagementInterface behavior
+- Group tests in classes by behavior area (e.g., `TestWrapperConfigValidation`, `TestTypeValidationErrors`, `TestAutoCorrectionFeedback`)
 - Use `tmp_path` fixture for any file I/O tests
 - Use `unittest.mock` and `AsyncMock` for isolating components — don't test through the full stack in unit tests
 - Async tests: use `async def test_*` methods inside classes — pytest-asyncio handles the event loop

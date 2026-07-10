@@ -5,7 +5,7 @@ A lightweight wrapper that manages your Palworld Dedicated Server process on Win
 ## Features
 
 - **Auto-start on connect** — The wrapper listens on the game port. When a player tries to join, it launches the server automatically.
-- **Auto-shutdown on idle** — After 10 minutes (configurable) with no players connected, the server shuts down gracefully.
+- **Auto-shutdown on idle** — After 5 minutes (configurable) with no players connected, the server shuts down gracefully.
 - **Player monitoring** — Tracks connected players via RCON polling.
 - **CLI management** — Start, stop, restart, check status, and modify server settings from an interactive prompt.
 - **Settings editor** — View and modify `PalWorldSettings.ini` values with type/range validation, without editing the file by hand.
@@ -50,7 +50,7 @@ python -m src.main --server-exe <path> --settings-file <path> --rcon-password <p
 | `--rcon-password` | `""` | RCON admin password |
 | `--rcon-port` | `25575` | RCON TCP port |
 | `--game-port` | `8211` | Game UDP port |
-| `--idle-timeout` | `600` | Seconds with 0 players before auto-shutdown |
+| `--idle-timeout` | `300` | Seconds with 0 players before auto-shutdown |
 | `--poll-interval` | `10` | Seconds between player count checks (1–30) |
 | `--log-file` | `wrapper.log` | Log file path |
 
@@ -74,7 +74,7 @@ Once running, the wrapper presents a `>` prompt:
 1. The wrapper starts in **monitoring mode**, listening for UDP traffic on the game port (retries binding with backoff if the port isn't immediately available).
 2. When a player connects, it releases the port, launches `PalServer.exe`, and waits for the RCON TCP port (25575) to become available — a reliable signal that the server is fully initialized.
 3. While running, it connects to RCON (with retry/backoff if the server is slow to initialize) and polls for player count every few seconds.
-4. When the last player leaves, a 10-minute idle timer starts.
+4. When the last player leaves, a 5-minute idle timer starts.
 5. If no one rejoins before the timer expires, the server shuts down and the wrapper resumes monitoring.
 
 ## Development

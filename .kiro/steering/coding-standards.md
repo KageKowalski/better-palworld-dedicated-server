@@ -30,6 +30,8 @@
 - Use result dataclasses for expected error paths (file not found, timeout, invalid input)
 - Use exceptions only for truly unexpected/programmer errors
 - RCON failures preserve the last known state — never reset player count on error
+- Input validation returns error message strings (not exceptions) when values fail type/range checks
+- Auto-correction results use `CorrectionResult` dataclass to track whether values were modified
 
 ## Naming
 

@@ -18,14 +18,27 @@ Commands:
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from src.config import WrapperConfig
 from src.models import ServerState, WrapperStatus
-from src.settings_parser import SettingsParser
+from src.settings_parser import SETTING_DEFINITIONS, SettingsParser
 from src.wrapper_core import WrapperCore
 
 logger = logging.getLogger(__name__)
+
+PASSWORD_MASK = "********"
+
+
+@dataclass
+class CorrectionResult:
+    """Result of input auto-correction for the set command."""
+
+    value: Any  # The corrected value to write
+    was_corrected: bool  # Whether auto-correction was applied
+    original_input: str  # The user's original input string
 
 
 class ManagementInterface:
@@ -224,6 +237,17 @@ class ManagementInterface:
         status = self._wrapper_core.get_status()
         await self.display_status(status)
 
+    def _is_password_setting(self, key: str) -> bool:
+        """Check if a setting key is a password field.
+
+        Args:
+            key: The setting key name to check.
+
+        Returns:
+            True when key contains the substring "Password" (case-sensitive).
+        """
+        return "Password" in key
+
     async def _cmd_settings(self) -> None:
         """Handle the 'settings' command."""
         settings = self._settings_parser.read_settings(self._config.settings_file_path)
@@ -239,10 +263,14 @@ class ManagementInterface:
         await self.display_message("Current Server Settings:")
         await self.display_message("-" * 40)
         for key, value in sorted(settings.items()):
-            await self.display_message(f"  {key} = {value}")
+            display_value = PASSWORD_MASK if self._is_password_setting(key) else value
+            await self.display_message(f"  {key} = {display_value}")
 
     async def _cmd_set(self, parts: list[str]) -> None:
         """Handle the 'set <key> <value>' command.
+
+        Validates and auto-corrects user input based on the setting's type
+        definition before delegating to SettingsParser.write_setting.
 
         Args:
             parts: The split command parts (["set", "<key>", "<value>"]).
@@ -254,13 +282,38 @@ class ManagementInterface:
         key = parts[1]
         value = parts[2]
 
-        # Validate and write the setting
-        result = self._settings_parser.write_setting(
-            self._config.settings_file_path, key, value
+        # Look up setting definition for type-aware validation
+        definition = SETTING_DEFINITIONS.get(key)
+
+        if definition is None:
+            # Unknown setting: write as-is without validation
+            correction = CorrectionResult(
+                value=value, was_corrected=False, original_input=value
+            )
+        else:
+            # Validate and auto-correct based on value_type
+            result = self._validate_and_correct(key, value, definition)
+            if isinstance(result, str):
+                # Validation failed — result is the error message
+                await self.display_message(result)
+                return
+            correction = result
+
+        # Write the corrected value
+        write_result = self._settings_parser.write_setting(
+            self._config.settings_file_path, key, correction.value
         )
 
-        if result.valid:
-            await self.display_message(f"Setting '{key}' updated to '{value}'.")
+        if write_result.valid:
+            if correction.was_corrected:
+                await self.display_message(
+                    f"Setting '{key}' updated to '{correction.value}' "
+                    f"(auto-corrected from '{correction.original_input}')."
+                )
+            else:
+                await self.display_message(
+                    f"Setting '{key}' updated to '{correction.value}'."
+                )
 
             # Warn if server is running that restart is required
             status = self._wrapper_core.get_status()
@@ -271,8 +324,186 @@ class ManagementInterface:
                 )
         else:
             await self.display_message(
-                f"Failed to update setting: {result.error_message}"
+                f"Failed to update setting: {write_result.error_message}"
             )
+
+    def _validate_and_correct(
+        self, key: str, value: str, definition: Any
+    ) -> CorrectionResult | str:
+        """Validate and auto-correct a value based on its setting definition.
+
+        Args:
+            key: The setting key name.
+            value: The user-provided value string.
+            definition: The SettingDefinition for this setting.
+
+        Returns:
+            CorrectionResult with the corrected value on success, or an error
+            message string on validation failure.
+        """
+        if definition.value_type == str:
+            if definition.allowed_values is not None:
+                # Enum validation: check against allowed_values list
+                return self._validate_enum(key, value, definition)
+            else:
+                # String auto-correction: handle quoting
+                return self._correct_string(value)
+        elif definition.value_type == bool:
+            return self._correct_boolean(key, value)
+        elif definition.value_type == int:
+            return self._validate_integer(key, value, definition)
+        elif definition.value_type == float:
+            return self._validate_float(key, value, definition)
+
+        # Fallback: pass as-is
+        return CorrectionResult(value=value, was_corrected=False, original_input=value)
+
+    def _correct_string(self, value: str) -> CorrectionResult:
+        """Auto-correct string values by handling quoting.
+
+        - If already quoted with "...", strip outer quotes and pass inner content.
+        - If not quoted, pass as-is (SettingsParser._format_value adds quotes on write).
+
+        Args:
+            value: The user-provided value string.
+
+        Returns:
+            CorrectionResult with the corrected string value.
+        """
+        if value.startswith('"') and value.endswith('"') and len(value) >= 2:
+            # Already quoted: strip outer quotes, pass inner content
+            inner = value[1:-1]
+            return CorrectionResult(
+                value=inner, was_corrected=True, original_input=value
+            )
+        else:
+            # Not quoted: pass as-is (write_setting will add quotes via _format_value)
+            return CorrectionResult(
+                value=value, was_corrected=False, original_input=value
+            )
+
+    def _correct_boolean(self, key: str, value: str) -> CorrectionResult | str:
+        """Normalize boolean values to canonical True/False form.
+
+        Args:
+            key: The setting key name (for error messages).
+            value: The user-provided value string.
+
+        Returns:
+            CorrectionResult with normalized boolean, or error message string.
+        """
+        lower = value.lower()
+        if lower == "true":
+            normalized = "True"
+        elif lower == "false":
+            normalized = "False"
+        else:
+            return (
+                f"Error: Setting '{key}' must be a boolean (True/False), "
+                f"got: '{value}'"
+            )
+
+        was_corrected = value != normalized
+        return CorrectionResult(
+            value=normalized, was_corrected=was_corrected, original_input=value
+        )
+
+    def _validate_integer(
+        self, key: str, value: str, definition: Any
+    ) -> CorrectionResult | str:
+        """Validate and parse an integer value, checking range constraints.
+
+        Args:
+            key: The setting key name (for error messages).
+            value: The user-provided value string.
+            definition: The SettingDefinition with min/max constraints.
+
+        Returns:
+            CorrectionResult with the parsed int, or error message string.
+        """
+        try:
+            int_value = int(value)
+        except ValueError:
+            return (
+                f"Error: Setting '{key}' must be an integer, got: '{value}'"
+            )
+
+        # Range validation
+        if definition.min_value is not None and int_value < definition.min_value:
+            return (
+                f"Error: Setting '{key}' value {int_value} is out of range. "
+                f"Allowed range: {definition.min_value} to {definition.max_value}."
+            )
+        if definition.max_value is not None and int_value > definition.max_value:
+            return (
+                f"Error: Setting '{key}' value {int_value} is out of range. "
+                f"Allowed range: {definition.min_value} to {definition.max_value}."
+            )
+
+        return CorrectionResult(
+            value=int_value, was_corrected=False, original_input=value
+        )
+
+    def _validate_float(
+        self, key: str, value: str, definition: Any
+    ) -> CorrectionResult | str:
+        """Validate and parse a float value, checking range constraints.
+
+        Args:
+            key: The setting key name (for error messages).
+            value: The user-provided value string.
+            definition: The SettingDefinition with min/max constraints.
+
+        Returns:
+            CorrectionResult with the parsed float, or error message string.
+        """
+        try:
+            float_value = float(value)
+        except ValueError:
+            return (
+                f"Error: Setting '{key}' must be a float, got: '{value}'"
+            )
+
+        # Range validation
+        if definition.min_value is not None and float_value < definition.min_value:
+            return (
+                f"Error: Setting '{key}' value {float_value} is out of range. "
+                f"Allowed range: {definition.min_value} to {definition.max_value}."
+            )
+        if definition.max_value is not None and float_value > definition.max_value:
+            return (
+                f"Error: Setting '{key}' value {float_value} is out of range. "
+                f"Allowed range: {definition.min_value} to {definition.max_value}."
+            )
+
+        was_corrected = value != f"{float_value:.6f}"
+        return CorrectionResult(
+            value=float_value, was_corrected=was_corrected, original_input=value
+        )
+
+    def _validate_enum(
+        self, key: str, value: str, definition: Any
+    ) -> CorrectionResult | str:
+        """Validate a value against an enum-type setting's allowed values.
+
+        Args:
+            key: The setting key name (for error messages).
+            value: The user-provided value string.
+            definition: The SettingDefinition with allowed_values list.
+
+        Returns:
+            CorrectionResult with the value as-is, or error message string.
+        """
+        if value not in definition.allowed_values:
+            allowed = ", ".join(definition.allowed_values)
+            return (
+                f"Error: Setting '{key}' value '{value}' is not valid. "
+                f"Allowed values: {allowed}"
+            )
+
+        return CorrectionResult(
+            value=value, was_corrected=False, original_input=value
+        )
 
     async def _cmd_help(self) -> None:
         """Handle the 'help' command."""
