@@ -146,22 +146,22 @@ class WrapperCore:
             await self._connection_listener.start_listening()
             return
 
-        # Wait for the server to be ready on the game port
+        # Wait for the server RCON port to be ready (reliable TCP indicator)
         port_ready = await self._process_manager.wait_for_port(
-            port=self._config.game_port,
+            port=self._config.rcon_port,
             timeout=self._config.start_timeout_seconds,
         )
 
         if not port_ready:
             logger.error(
-                "Server failed to listen on port %d within %ds",
-                self._config.game_port,
+                "Server RCON not ready on port %d within %ds",
+                self._config.rcon_port,
                 self._config.start_timeout_seconds,
             )
             self._logger.log_error(
                 "Server startup timeout",
                 Exception(
-                    f"Server not listening on port {self._config.game_port} "
+                    f"Server RCON not ready on port {self._config.rcon_port} "
                     f"within {self._config.start_timeout_seconds}s"
                 ),
             )
@@ -257,15 +257,16 @@ class WrapperCore:
             await self._connection_listener.start_listening()
             return result
 
-        # Wait for port readiness
+        # Wait for RCON port readiness (reliable TCP indicator)
         port_ready = await self._process_manager.wait_for_port(
-            port=self._config.game_port,
+            port=self._config.rcon_port,
             timeout=self._config.start_timeout_seconds,
         )
 
         if not port_ready:
             error_msg = (
-                f"Server did not become ready within {self._config.start_timeout_seconds}s"
+                f"Server RCON not ready on port {self._config.rcon_port} "
+                f"within {self._config.start_timeout_seconds}s"
             )
             logger.error(error_msg)
             await self._process_manager.stop_server(

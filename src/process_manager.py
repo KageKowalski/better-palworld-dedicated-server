@@ -139,14 +139,15 @@ class ProcessManager:
         """
         return self._process is not None and self._process.returncode is None
 
-    async def wait_for_port(self, port: int = 8211, timeout: int = 120) -> bool:
-        """Wait for the server to begin listening on the specified port.
+    async def wait_for_port(self, port: int = 25575, timeout: int = 120) -> bool:
+        """Wait for the server to begin listening on the specified TCP port.
 
         Polls using TCP socket connection attempts with a brief sleep between
-        each attempt.
+        each attempt. Defaults to the RCON port (25575) which is a reliable
+        indicator that the server is fully initialized.
 
         Args:
-            port: The TCP/UDP port to check (default 8211).
+            port: The TCP port to check (default 25575, the RCON port).
             timeout: Maximum seconds to wait for the port to become available.
 
         Returns:
