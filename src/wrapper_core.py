@@ -505,6 +505,10 @@ class WrapperCore:
                 "Server stop failed during maintenance: %s",
                 stop_result.error_message,
             )
+        elif stop_result.was_forced:
+            logger.warning(
+                "Server graceful stop failed during maintenance, force-stop performed"
+            )
 
         # --- MONITORING phase (no connection listener during maintenance!) ---
         self._transition_to(ServerState.MONITORING, "Server stopped for maintenance")
