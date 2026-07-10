@@ -413,24 +413,185 @@ class WrapperCore:
         )
 
     # -------------------------------------------------------------------------
-    # Maintenance callbacks (placeholders - implemented in task 5.2)
+    # Maintenance callbacks
     # -------------------------------------------------------------------------
 
     async def _handle_broadcast_due(self) -> None:
         """Handle the maintenance broadcast timer firing.
 
         Sends a warning message to connected players that maintenance is
-        approaching. Implemented in task 5.2.
+        approaching. If no players are connected, the broadcast is skipped.
+        If the RCON command fails, a warning is logged and the maintenance
+        cycle continues regardless.
         """
-        pass
+        if self._maintenance_in_progress:
+            logger.debug("Broadcast skipped: maintenance already in progress")
+            return
+
+        remaining_seconds = self._config.maintenance_broadcast_lead_seconds
+
+        if self._player_count <= 0:
+            logger.debug(
+                "Broadcast skipped: no players connected"
+            )
+            return
+
+        broadcast_message = (
+            f"Broadcast Server_maintenance_in_{remaining_seconds}_seconds"
+        )
+
+        try:
+            await self._rcon_client.send_command(broadcast_message)
+            logger.info(
+                "Maintenance broadcast sent: %s", broadcast_message
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to send maintenance broadcast '%s': %s",
+                broadcast_message,
+                e,
+            )
 
     async def _handle_maintenance_due(self) -> None:
         """Handle the maintenance timer firing.
 
         Orchestrates the full maintenance cycle: stop, update, restart.
-        Implemented in task 5.2.
+        Sets the maintenance-in-progress flag, cancels timers and RCON polling,
+        then delegates to _run_maintenance_cycle().
         """
-        pass
+        if self._maintenance_in_progress:
+            logger.debug(
+                "Maintenance timer fired but cycle already in progress, ignoring"
+            )
+            return
+
+        self._maintenance_in_progress = True
+        self._idle_timer.cancel()
+        self._maintenance_timer.cancel()
+        self._cancel_rcon_polling()
+
+        await self._run_maintenance_cycle()
+
+    async def _run_maintenance_cycle(self) -> None:
+        """Execute the full maintenance cycle: stop → update → start.
+
+        Transitions through RUNNING → STOPPING → MONITORING → STARTING → RUNNING.
+        Proceeds even if individual steps fail (stop, update) to ensure the
+        server is always restarted.
+        """
+        loop = asyncio.get_event_loop()
+        cycle_start = loop.time()
+
+        logger.info("Maintenance cycle starting")
+
+        # --- STOPPING phase ---
+        self._transition_to(ServerState.STOPPING, "Maintenance cycle initiated")
+
+        # Send RCON Shutdown for graceful save-and-exit
+        try:
+            await self._rcon_client.send_command("Shutdown")
+        except Exception as e:
+            logger.warning("RCON Shutdown command failed during maintenance: %s", e)
+
+        # Disconnect RCON
+        await self._rcon_client.disconnect()
+
+        # Stop the server process (proceed even if it fails)
+        stop_result = await self._process_manager.stop_server(
+            timeout=self._config.stop_timeout_seconds
+        )
+        if not stop_result.success:
+            logger.warning(
+                "Server stop failed during maintenance: %s",
+                stop_result.error_message,
+            )
+
+        # --- MONITORING phase (no connection listener during maintenance!) ---
+        self._transition_to(ServerState.MONITORING, "Server stopped for maintenance")
+
+        # Run SteamCMD update
+        update_result = await self._steam_updater.update()
+        if update_result.success:
+            logger.info("SteamCMD update completed successfully")
+        elif update_result.skipped:
+            logger.info("SteamCMD update skipped (paths not configured or not found)")
+        elif update_result.timed_out:
+            logger.warning(
+                "SteamCMD update timed out: %s", update_result.error_message
+            )
+        else:
+            logger.warning(
+                "SteamCMD update failed: %s", update_result.error_message
+            )
+
+        # --- STARTING phase ---
+        self._transition_to(ServerState.STARTING, "Starting server after maintenance")
+
+        start_result = await self._process_manager.start_server(
+            str(self._config.server_exe_path)
+        )
+
+        if not start_result.success:
+            logger.error(
+                "Server start failed after maintenance: %s",
+                start_result.error_message,
+            )
+            # Fall back to MONITORING with connection listener active
+            self._transition_to(
+                ServerState.MONITORING, "Server start failed after maintenance"
+            )
+            self._maintenance_in_progress = False
+            await self._connection_listener.start_listening()
+            return
+
+        # Wait for RCON port readiness
+        port_ready = await self._process_manager.wait_for_port(
+            port=self._config.rcon_port,
+            timeout=self._config.start_timeout_seconds,
+        )
+
+        if not port_ready:
+            logger.error(
+                "Server RCON not ready on port %d within %ds after maintenance",
+                self._config.rcon_port,
+                self._config.start_timeout_seconds,
+            )
+            await self._process_manager.stop_server(
+                timeout=self._config.stop_timeout_seconds
+            )
+            self._transition_to(
+                ServerState.MONITORING, "Server startup timeout after maintenance"
+            )
+            self._maintenance_in_progress = False
+            await self._connection_listener.start_listening()
+            return
+
+        # --- RUNNING phase ---
+        self._transition_to(ServerState.RUNNING, "Server ready after maintenance")
+
+        # Reset player count (fresh start)
+        self._player_count = 0
+
+        # Record new running_since time
+        self._running_since = loop.time()
+
+        # Clear maintenance flag
+        self._maintenance_in_progress = False
+
+        # Restart RCON polling
+        self._start_rcon_polling()
+
+        # Restart idle timer (no players after fresh start)
+        await self._idle_timer.start()
+
+        # Start a new maintenance timer cycle
+        await self._maintenance_timer.start()
+
+        # Log total maintenance duration
+        cycle_duration = loop.time() - cycle_start
+        logger.info(
+            "Maintenance cycle completed in %.1f seconds", cycle_duration
+        )
 
     # -------------------------------------------------------------------------
     # Private helpers
