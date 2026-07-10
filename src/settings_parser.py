@@ -465,6 +465,9 @@ class SettingsParser:
             except ValueError:
                 return raw_value
         else:
+            # String type: strip surrounding quotes if present
+            if raw_value.startswith('"') and raw_value.endswith('"'):
+                return raw_value[1:-1]
             return raw_value
 
     @staticmethod
