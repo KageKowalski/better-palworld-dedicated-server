@@ -568,5 +568,7 @@ class SettingsParser:
                 return f"{float_val:.6f}"
             elif definition.value_type == int:
                 return str(int(value))
+            elif definition.value_type == str:
+                return f'"{value}"'
 
         return str(value)
