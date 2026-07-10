@@ -462,10 +462,33 @@ class WrapperCore:
         # Give the server a moment to initialize RCON
         await asyncio.sleep(2)
 
-        # Attempt initial RCON connection
-        connected = await self._rcon_client.connect()
-        if not connected:
-            logger.warning("Initial RCON connection failed, will retry on next poll")
+        # Attempt initial RCON connection with retry and backoff
+        max_attempts = 5
+        delays = [2, 4, 8, 16, 30]  # seconds between retries
+        connected = False
+
+        for attempt in range(1, max_attempts + 1):
+            if self._state != ServerState.RUNNING:
+                logger.debug("State changed during RCON connect retry, aborting")
+                return
+
+            connected = await self._rcon_client.connect()
+            if connected:
+                break
+
+            if attempt < max_attempts:
+                delay = delays[attempt - 1]
+                logger.warning(
+                    "RCON connection attempt %d/%d failed, retrying in %ds...",
+                    attempt, max_attempts, delay,
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error(
+                    "RCON connection failed after %d attempts. "
+                    "Will continue polling with reconnect-on-failure fallback.",
+                    max_attempts,
+                )
 
         try:
             while self._state == ServerState.RUNNING:
