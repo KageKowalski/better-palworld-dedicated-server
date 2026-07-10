@@ -1,8 +1,0 @@
-README.md
-pyproject.toml
-palworld_server_wrapper.egg-info/PKG-INFO
-palworld_server_wrapper.egg-info/SOURCES.txt
-palworld_server_wrapper.egg-info/dependency_links.txt
-palworld_server_wrapper.egg-info/requires.txt
-palworld_server_wrapper.egg-info/top_level.txt
-src/__init__.py
