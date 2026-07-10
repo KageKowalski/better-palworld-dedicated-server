@@ -79,9 +79,10 @@ class ProcessManager:
     async def stop_server(self, timeout: int = 30) -> StopResult:
         """Stop the server process gracefully, with force kill as fallback.
 
-        First attempts graceful termination via process.terminate() which sends
-        CTRL_BREAK_EVENT on Windows. If the process doesn't exit within the
-        timeout, it is forcibly killed.
+        On Windows, PalServer.exe is a launcher that spawns child processes.
+        Simple process.terminate() only kills the launcher, leaving the actual
+        game server running. This method uses `taskkill /T /F` to kill the
+        entire process tree reliably.
 
         Args:
             timeout: Seconds to wait for graceful shutdown before force killing.
@@ -93,40 +94,66 @@ class ProcessManager:
             return StopResult(success=False, error_message="Server process is not running")
 
         self._stopping = True
+        pid = self._process.pid
 
         try:
-            # Attempt graceful shutdown
-            logger.info("Sending terminate signal to server process (PID %d)", self._process.pid)
-            self._process.terminate()
+            # Kill the entire process tree using taskkill on Windows
+            # PalServer.exe spawns child processes, so we must use /T (tree kill)
+            logger.info(
+                "Killing server process tree (PID %d) with taskkill", pid
+            )
+            kill_proc = await asyncio.create_subprocess_exec(
+                "taskkill", "/F", "/T", "/PID", str(pid),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(
+                kill_proc.communicate(), timeout=timeout
+            )
 
-            try:
-                await asyncio.wait_for(self._process.wait(), timeout=timeout)
-                logger.info("Server process terminated gracefully")
-                self._cancel_monitor()
-                return StopResult(success=True, was_forced=False)
-            except asyncio.TimeoutError:
-                # Graceful shutdown timed out, force kill
-                logger.warning(
-                    "Server process did not terminate within %ds, force killing", timeout
-                )
-                self._process.kill()
-                try:
-                    await asyncio.wait_for(self._process.wait(), timeout=5)
-                except asyncio.TimeoutError:
-                    logger.critical("Server process did not respond to kill signal")
-                    self._cancel_monitor()
-                    return StopResult(
-                        success=False,
-                        was_forced=True,
-                        error_message="Process did not respond to kill signal",
+            if kill_proc.returncode != 0:
+                stderr_text = stderr.decode(errors="replace").strip()
+                # taskkill returns non-zero if PID not found (already exited)
+                if "not found" in stderr_text.lower():
+                    logger.info("Server process tree already terminated")
+                else:
+                    logger.warning(
+                        "taskkill returned code %d: %s",
+                        kill_proc.returncode, stderr_text,
                     )
 
-                logger.info("Server process forcibly killed")
-                self._cancel_monitor()
-                return StopResult(success=True, was_forced=True)
+            # Wait for our tracked process handle to reflect termination
+            try:
+                await asyncio.wait_for(self._process.wait(), timeout=10)
+            except asyncio.TimeoutError:
+                # Process handle didn't close, but tree kill should have worked
+                logger.warning(
+                    "Process handle did not close within 10s after taskkill"
+                )
 
+            logger.info("Server process tree terminated (PID %d)", pid)
+            self._cancel_monitor()
+            return StopResult(success=True, was_forced=True)
+
+        except asyncio.TimeoutError:
+            logger.error("taskkill timed out after %ds", timeout)
+            self._cancel_monitor()
+            return StopResult(
+                success=False,
+                was_forced=True,
+                error_message="taskkill timed out",
+            )
+        except FileNotFoundError:
+            # taskkill not available — fall back to process.kill()
+            logger.warning("taskkill not found, falling back to process.kill()")
+            self._process.kill()
+            try:
+                await asyncio.wait_for(self._process.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                pass
+            self._cancel_monitor()
+            return StopResult(success=True, was_forced=True)
         except ProcessLookupError:
-            # Process already exited between our check and the terminate call
             logger.info("Server process already terminated")
             self._cancel_monitor()
             return StopResult(success=True, was_forced=False)

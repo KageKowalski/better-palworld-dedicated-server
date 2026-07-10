@@ -228,10 +228,11 @@ class TestPreservationProperties:
         # Mock all the dependencies
         core._process_manager = MagicMock()
         core._process_manager.stop_server = AsyncMock(
-            return_value=StopResult(success=True, was_forced=False)
+            return_value=StopResult(success=True, was_forced=True)
         )
 
         core._rcon_client = MagicMock()
+        core._rcon_client.send_command = AsyncMock(return_value=None)
         core._rcon_client.disconnect = AsyncMock()
 
         core._idle_timer = MagicMock()

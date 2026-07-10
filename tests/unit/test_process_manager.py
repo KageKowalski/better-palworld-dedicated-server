@@ -89,7 +89,7 @@ class TestStopServer:
 
     @pytest.mark.asyncio
     async def test_stop_server_graceful(self, process_manager):
-        """Stopping a running process gracefully succeeds."""
+        """Stopping a running process with taskkill succeeds."""
         # Start a real process that we can terminate
         process_manager._process = await asyncio.create_subprocess_exec(
             sys.executable,
@@ -104,40 +104,28 @@ class TestStopServer:
 
         result = await process_manager.stop_server(timeout=10)
         assert result.success is True
-        assert result.was_forced is False
+        # taskkill /F always reports was_forced=True since it's a tree kill
+        assert result.was_forced is True
 
     @pytest.mark.asyncio
-    async def test_stop_server_force_kill(self, process_manager):
-        """If graceful shutdown times out, force kill is used."""
-        # Create a mock process that doesn't terminate gracefully
+    async def test_stop_server_already_terminated_process(self, process_manager):
+        """Stopping when taskkill reports process not found still succeeds."""
+        # Use a PID that doesn't exist — taskkill will fail with "not found"
         mock_proc = MagicMock()
         mock_proc.returncode = None
-        mock_proc.pid = 9999
-        mock_proc.terminate = MagicMock()
-
-        # First wait (graceful) times out, second wait (after kill) succeeds
-        call_count = 0
+        mock_proc.pid = 99999999  # Non-existent PID
 
         async def mock_wait():
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                # Simulate the process not dying during graceful shutdown
-                await asyncio.sleep(100)
-            else:
-                # After kill, process exits
-                mock_proc.returncode = -9
-                return -9
+            mock_proc.returncode = -1
+            return -1
 
         mock_proc.wait = mock_wait
-        mock_proc.kill = MagicMock()
         process_manager._process = mock_proc
         process_manager._monitor_task = None
 
-        result = await process_manager.stop_server(timeout=1)
+        result = await process_manager.stop_server(timeout=10)
+        # Should still succeed — "not found" means it's already gone
         assert result.success is True
-        assert result.was_forced is True
-        mock_proc.kill.assert_called_once()
 
 
 class TestIsRunning:

@@ -73,6 +73,29 @@ class RconClient:
                 success=False, error_message=f"RCON query failed: {e}"
             )
 
+    async def send_command(self, command: str) -> str | None:
+        """Send an arbitrary RCON command to the server.
+
+        Args:
+            command: The RCON command string to send.
+
+        Returns:
+            The server's response string on success, None on failure.
+        """
+        if not self._connected or self._client is None:
+            logger.warning("Cannot send RCON command: not connected")
+            return None
+
+        try:
+            response = await asyncio.to_thread(
+                self._client.run, command, enforce_id=False
+            )
+            return response
+        except Exception as e:
+            logger.error("RCON command '%s' failed: %s", command, e)
+            self._connected = False
+            return None
+
     async def disconnect(self) -> None:
         """Close the RCON connection."""
         if self._client is not None:
