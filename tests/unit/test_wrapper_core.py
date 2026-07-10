@@ -51,7 +51,8 @@ class TestIdleTimeoutStopFlow:
         )
         core._process_manager.get_pid = MagicMock(return_value=12345)
 
-        # Mock RCON client disconnect
+        # Mock RCON client
+        core._rcon_client.send_command = AsyncMock(return_value=None)
         core._rcon_client.disconnect = AsyncMock()
 
         # Mock connection listener
@@ -82,6 +83,7 @@ class TestIdleTimeoutStopFlow:
             return_value=StopResult(success=True, was_forced=False)
         )
         core._process_manager.get_pid = MagicMock(return_value=12345)
+        core._rcon_client.send_command = AsyncMock(return_value=None)
         core._rcon_client.disconnect = AsyncMock()
         core._connection_listener.start_listening = AsyncMock()
         core._logger.log_state_transition = MagicMock()
@@ -108,6 +110,7 @@ class TestIdleTimeoutStopFlow:
             return_value=StopResult(success=True, was_forced=False)
         )
         core._process_manager.get_pid = MagicMock(return_value=12345)
+        core._rcon_client.send_command = AsyncMock(return_value=None)
         core._rcon_client.disconnect = AsyncMock()
         core._connection_listener.start_listening = AsyncMock()
         core._logger.log_state_transition = MagicMock()
@@ -134,6 +137,7 @@ class TestIdleTimeoutStopFlow:
             return_value=StopResult(success=True, was_forced=False)
         )
         core._process_manager.get_pid = MagicMock(return_value=12345)
+        core._rcon_client.send_command = AsyncMock(return_value=None)
         core._rcon_client.disconnect = AsyncMock()
         core._connection_listener.start_listening = AsyncMock()
         core._logger.log_state_transition = MagicMock()
@@ -154,6 +158,7 @@ class TestIdleTimeoutStopFlow:
             return_value=StopResult(success=True, was_forced=False)
         )
         core._process_manager.get_pid = MagicMock(return_value=12345)
+        core._rcon_client.send_command = AsyncMock(return_value=None)
         core._rcon_client.disconnect = AsyncMock()
         core._connection_listener.start_listening = AsyncMock()
         core._logger.log_state_transition = MagicMock()

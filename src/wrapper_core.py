@@ -287,6 +287,9 @@ class WrapperCore:
         """Stop the server gracefully with force-kill fallback.
 
         Only works from RUNNING state. Transitions through STOPPING to MONITORING.
+        Sends the RCON Shutdown command first for a graceful save-and-exit,
+        then kills the process tree as a fallback to ensure all child processes
+        are cleaned up.
 
         Returns:
             StopResult indicating success and whether force was required.
@@ -303,10 +306,18 @@ class WrapperCore:
         self._cancel_rcon_polling()
         self._idle_timer.cancel()
 
+        # Send RCON Shutdown command for graceful save-and-exit before
+        # disconnecting. This tells PalServer to save world data and exit.
+        try:
+            await self._rcon_client.send_command("Shutdown")
+        except Exception as e:
+            logger.warning("RCON Shutdown command failed: %s", e)
+
         # Disconnect RCON
         await self._rcon_client.disconnect()
 
-        # Stop the process
+        # Kill the process tree — PalServer.exe spawns child processes that
+        # must all be terminated to release UDP port 8211
         result = await self._process_manager.stop_server(
             timeout=self._config.stop_timeout_seconds
         )
