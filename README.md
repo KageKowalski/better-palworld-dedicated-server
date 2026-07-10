@@ -22,7 +22,7 @@ A lightweight wrapper that manages your Palworld Dedicated Server process on Win
 ## Installation
 
 ```bash
-git clone https://github.com/your-username/better-palworld-dedicated-server.git
+git clone https://github.com/KageKowalski/better-palworld-dedicated-server.git
 cd better-palworld-dedicated-server
 pip install -e .
 ```
@@ -77,9 +77,21 @@ Once running, the wrapper presents a `>` prompt:
 4. When the last player leaves, a 5-minute idle timer starts.
 5. If no one rejoins before the timer expires, the server shuts down and the wrapper resumes monitoring.
 
+> **Note:** The player whose connection triggers the auto-start will need to reconnect once the server finishes launching (roughly 1–2 minutes). The initial connection packet is consumed by the wrapper to detect intent — it cannot be forwarded to the server.
+
 ## Development
 
 ```bash
 pip install -e ".[dev]"
 python -m pytest tests/ -v
 ```
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| Wrapper can't bind to port 8211 | Make sure the Palworld server isn't already running. The wrapper retries with backoff, but check for port conflicts. |
+| Server starts but RCON never connects | Verify `RCONEnabled=True` and `AdminPassword` is set in `PalWorldSettings.ini`. The password must match `--rcon-password`. |
+| Idle timer shuts down too quickly | Increase `--idle-timeout` (e.g., `--idle-timeout 600` for 10 minutes). |
+| Wrapper exits immediately | Check `wrapper.log` for configuration errors. Ensure `--server-exe` and `--settings-file` paths are correct. |
+| Player count stuck after disconnect | RCON may be lagging — the wrapper retries on the next poll interval. If persistent, restart the wrapper. |
