@@ -6,13 +6,14 @@ components, and runs the asyncio event loop with top-level exception handling.
 Usage:
     python -m src.main --server-exe <path> --settings-file <path> [options]
 
-Requirements: 7.1, 7.2, 7.4, 8.5
+Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 7.1, 7.2, 7.4, 8.5
 """
 
 import argparse
 import asyncio
 import logging
 import sys
+import tkinter as tk
 from pathlib import Path
 
 from src.config import WrapperConfig
@@ -20,6 +21,22 @@ from src.management_interface import ManagementInterface
 from src.wrapper_core import WrapperCore
 
 logger = logging.getLogger(__name__)
+
+
+def interface_type(value: str) -> str:
+    """Case-insensitive type function for the --interface argument.
+
+    Converts the input to lowercase so that "GUI", "Console", "gui", "CONSOLE",
+    etc. are all accepted. argparse's choices validation then checks against
+    the lowercase choices list ["gui", "console"].
+
+    Args:
+        value: The raw string value provided by the user.
+
+    Returns:
+        The lowercased string value.
+    """
+    return value.lower()
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -84,6 +101,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=Path("wrapper.log"),
         help="Log file path (default: wrapper.log)",
     )
+    parser.add_argument(
+        "--interface",
+        type=interface_type,
+        default="gui",
+        choices=["gui", "console"],
+        help="Interface mode: gui (default) or console",
+    )
 
     return parser.parse_args(argv)
 
@@ -114,14 +138,19 @@ def build_config(args: argparse.Namespace) -> WrapperConfig:
     return config
 
 
-async def run_wrapper(config: WrapperConfig) -> None:
+async def run_wrapper(config: WrapperConfig, interface_mode: str = "gui") -> None:
     """Run the wrapper core and management interface concurrently.
 
     Sets up a global exception handler on the asyncio event loop so that
     unhandled exceptions are logged but do not crash the wrapper (Req 8.5).
 
+    Selects the interface based on interface_mode:
+    - "gui": imports and instantiates GuiInterface (exits with code 1 on TclError)
+    - "console": uses existing ManagementInterface
+
     Args:
         config: Validated wrapper configuration.
+        interface_mode: Interface to use, either "gui" or "console".
     """
     loop = asyncio.get_running_loop()
 
@@ -143,12 +172,23 @@ async def run_wrapper(config: WrapperConfig) -> None:
 
     # Instantiate components
     wrapper_core = WrapperCore(config)
-    management_interface = ManagementInterface(wrapper_core, config)
+
+    # Select interface based on mode
+    if interface_mode == "gui":
+        try:
+            from src.gui_interface import GuiInterface
+            interface = GuiInterface(wrapper_core, config)
+        except tk.TclError as e:
+            logger.error("Failed to initialize GUI: %s", e)
+            print(f"Error: GUI cannot be initialized: {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        interface = ManagementInterface(wrapper_core, config)
 
     # Run both concurrently; if either finishes, cancel the other
     core_task = asyncio.create_task(wrapper_core.run(), name="wrapper_core")
     interface_task = asyncio.create_task(
-        management_interface.run(), name="management_interface"
+        interface.run(), name="interface"
     )
 
     done, pending = await asyncio.wait(
@@ -205,7 +245,7 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(1)
 
     try:
-        asyncio.run(run_wrapper(config))
+        asyncio.run(run_wrapper(config, args.interface))
     except KeyboardInterrupt:
         logger.info("Received Ctrl+C, shutting down gracefully")
         print("\nShutting down...")

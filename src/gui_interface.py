@@ -1,0 +1,1177 @@
+"""GUI Management Interface for the Palworld Server Wrapper.
+
+Provides a tkinter-based graphical interface for interacting with the wrapper.
+Integrates with asyncio via cooperative scheduling (periodic root.update()
+calls from an asyncio coroutine), ensuring neither the tkinter event loop
+nor the asyncio event loop is blocked for more than ~33ms.
+
+This module mirrors the role of ManagementInterface but with a graphical
+window instead of a CLI prompt.
+"""
+
+import asyncio
+import logging
+import sys
+import tkinter as tk
+from tkinter import ttk
+from collections.abc import Callable
+from dataclasses import dataclass, field
+
+from src.config import WrapperConfig
+from src.models import ServerState, WrapperStatus
+from src.settings_parser import SettingsParser
+from src.validation import CorrectionResult, PASSWORD_MASK, is_password_setting, validate_and_correct
+from src.wrapper_core import WrapperCore
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class NotificationState:
+    """Tracks the current notification display state."""
+
+    message: str = ""
+    is_error: bool = False
+    dismiss_after_id: str | None = None  # tkinter after() callback ID
+
+
+@dataclass
+class GuiState:
+    """Internal GUI state tracking for operation management."""
+
+    operation_in_progress: bool = False
+    shutdown_in_progress: bool = False
+    current_operation: str | None = None  # "start", "stop", "restart"
+
+
+class GuiInterface:
+    """tkinter-based GUI management interface for the Palworld Server Wrapper.
+
+    Integrates with asyncio via cooperative scheduling (periodic root.update()
+    calls from an asyncio coroutine). The run() method is an async coroutine
+    that runs concurrently with WrapperCore.run() via asyncio.gather().
+    """
+
+    def __init__(self, wrapper_core: WrapperCore, config: WrapperConfig) -> None:
+        """Initialize the GUI interface.
+
+        Creates the tkinter root window with title "Palworld Server Wrapper"
+        and minimum size 800x600. Wires WM_DELETE_WINDOW to _shutdown().
+
+        Args:
+            wrapper_core: The WrapperCore instance for command execution.
+            config: The wrapper configuration.
+
+        Raises:
+            SystemExit: If tkinter cannot initialize (no display environment).
+        """
+        self._wrapper_core = wrapper_core
+        self._config = config
+        self._running = False
+        self._gui_state = GuiState()
+        self._notification_state = NotificationState()
+
+        try:
+            self._root = tk.Tk()
+            self._root.title("Palworld Server Wrapper")
+            self._root.minsize(800, 600)
+            self._root.protocol("WM_DELETE_WINDOW", self._on_close_request)
+        except tk.TclError as e:
+            logger.error("Failed to initialize GUI: %s", e)
+            sys.exit(1)
+
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        """Construct the complete GUI layout.
+
+        Instantiates and arranges all GUI components in a vertical layout using
+        pack(). Components are grouped with labeled frames (ttk.LabelFrame) for
+        visual separation per Requirement 2.2.
+
+        Layout order (top to bottom):
+        1. ControlPanel - Server control buttons (Start/Stop/Restart)
+        2. StatusDisplay - Real-time server status fields
+        3. SettingsView - Read-only settings display (expandable)
+        4. SettingsEditor - Setting modification form
+        5. Button frame - Help and Quit buttons
+        6. NotificationBar - Success/error notification display (bottom)
+
+        All widget instances are stored as self._ attributes so
+        _disable_all_controls() and other methods can access them.
+        """
+        # 1. Control Panel - Server lifecycle buttons
+        self._control_panel = ControlPanel(
+            self._root,
+            on_start=lambda: asyncio.ensure_future(
+                self._execute_server_operation("start")
+            ),
+            on_stop=lambda: asyncio.ensure_future(
+                self._execute_server_operation("stop")
+            ),
+            on_restart=lambda: asyncio.ensure_future(
+                self._execute_server_operation("restart")
+            ),
+        )
+        self._control_panel.pack(fill="x", padx=10, pady=(10, 5))
+
+        # 2. Status Display - Real-time status fields
+        self._status_display = StatusDisplay(
+            self._root,
+            idle_timeout_threshold=self._config.idle_timeout_seconds,
+        )
+        self._status_display.pack(fill="x", padx=10, pady=5)
+
+        # 3. Settings View - Read-only settings list (gets expand=True for extra space)
+        self._settings_view = SettingsView(self._root, config=self._config)
+        self._settings_view.pack(fill="both", expand=True, padx=10, pady=5)
+
+        # 4. Settings Editor - Modify setting form
+        self._settings_editor = SettingsEditor(
+            self._root,
+            config=self._config,
+            wrapper_core=self._wrapper_core,
+            on_setting_changed=self._settings_view.refresh,
+        )
+        self._settings_editor.pack(fill="x", padx=10, pady=5)
+
+        # 5. Button frame - Help and Quit buttons
+        button_frame = ttk.Frame(self._root)
+        button_frame.pack(fill="x", padx=10, pady=5)
+
+        self._help_button = ttk.Button(
+            button_frame,
+            text="Help",
+            command=lambda: HelpDialog(self._root),
+        )
+        self._help_button.pack(side="left")
+
+        self._quit_button = ttk.Button(
+            button_frame,
+            text="Quit",
+            command=self._on_close_request,
+        )
+        self._quit_button.pack(side="right")
+
+        # 6. Notification Bar - Success/error messages (handles its own visibility)
+        self._notification_bar = NotificationBar(self._root)
+
+    def _schedule_status_refresh(self) -> None:
+        """Schedule periodic status display updates (every 1 second).
+
+        Initiates the first call to _refresh_status(), which then reschedules
+        itself every 1000ms via root.after(). This satisfies the requirement
+        that status refreshes between 500ms and 2 seconds.
+        """
+        self._root.after(1000, self._refresh_status)
+
+    def _refresh_status(self) -> None:
+        """Refresh the status display and control panel button states.
+
+        Calls WrapperCore.get_status() and updates the StatusDisplay and
+        ControlPanel widgets if they exist. Reschedules itself every 1 second
+        unless a shutdown is in progress.
+        """
+        if self._gui_state.shutdown_in_progress:
+            return
+
+        try:
+            status = self._wrapper_core.get_status()
+
+            # Update StatusDisplay if it exists
+            if hasattr(self, "_status_display") and self._status_display is not None:
+                self._status_display.update_status(status)
+
+            # Update ControlPanel button states if it exists and no operation in progress
+            if (
+                hasattr(self, "_control_panel")
+                and self._control_panel is not None
+                and not self._gui_state.operation_in_progress
+            ):
+                self._control_panel.update_button_states(status.server_state)
+
+        except Exception as e:
+            logger.error("Error refreshing status: %s", e)
+
+        # Reschedule the next refresh (only if not shutting down)
+        if not self._gui_state.shutdown_in_progress:
+            self._root.after(1000, self._refresh_status)
+
+    async def run(self) -> None:
+        """Main entry point - runs the tkinter event loop cooperatively with asyncio.
+
+        Calls root.update() every ~33ms (30 FPS equivalent) to process tkinter
+        events without blocking the asyncio event loop. This allows WrapperCore's
+        background tasks (RCON polling, idle timer, maintenance timer, connection
+        listener) to continue executing on schedule.
+
+        The loop continues until self._running is set to False (via _shutdown())
+        or the window is destroyed externally.
+        """
+        self._running = True
+        self._schedule_status_refresh()
+
+        while self._running:
+            try:
+                self._root.update()
+            except tk.TclError:
+                # Window has been destroyed (e.g., user closed it or shutdown completed)
+                break
+
+            await asyncio.sleep(0.033)
+
+    def _on_close_request(self) -> None:
+        """Handle the WM_DELETE_WINDOW event (user clicks window close button).
+
+        Schedules the async _shutdown() method as a task on the running event loop.
+        """
+        asyncio.ensure_future(self._shutdown())
+
+    async def _execute_server_operation(self, operation: str) -> None:
+        """Execute a server control operation in a non-blocking manner.
+
+        Sets operation_in_progress state, shows loading indicator on control panel,
+        calls the corresponding WrapperCore method, and handles the result by
+        showing success/error notifications and refreshing button states.
+
+        Uses try/finally to ensure cleanup (resetting operation state and refreshing
+        buttons) happens even if an unexpected exception occurs.
+
+        Args:
+            operation: One of "start", "stop", "restart".
+        """
+        self._gui_state.operation_in_progress = True
+        self._gui_state.current_operation = operation
+
+        if hasattr(self, "_control_panel") and self._control_panel is not None:
+            self._control_panel.set_loading(True)
+
+        try:
+            # Call the corresponding WrapperCore method
+            if operation == "start":
+                result = await self._wrapper_core.start_server()
+            elif operation == "stop":
+                result = await self._wrapper_core.stop_server()
+            elif operation == "restart":
+                result = await self._wrapper_core.restart_server()
+            else:
+                logger.error("Unknown server operation: %s", operation)
+                return
+
+            # Show success or error notification based on result
+            if result.success:
+                success_messages = {
+                    "start": "Server started successfully.",
+                    "stop": "Server stopped successfully.",
+                    "restart": "Server restarted successfully.",
+                }
+                message = success_messages.get(operation, f"Operation '{operation}' completed.")
+                if hasattr(self, "_notification_bar") and self._notification_bar is not None:
+                    self._notification_bar.show_success(message)
+            else:
+                error_message = result.error_message or f"Operation '{operation}' failed."
+                if hasattr(self, "_notification_bar") and self._notification_bar is not None:
+                    self._notification_bar.show_error(error_message)
+
+        except Exception as e:
+            logger.error("Unexpected error during %s operation: %s", operation, e)
+            if hasattr(self, "_notification_bar") and self._notification_bar is not None:
+                self._notification_bar.show_error(f"Unexpected error: {e}")
+
+        finally:
+            # Reset operation state
+            self._gui_state.operation_in_progress = False
+            self._gui_state.current_operation = None
+
+            # Refresh button states based on current server state
+            if hasattr(self, "_control_panel") and self._control_panel is not None:
+                self._control_panel.set_loading(False)
+                current_status = self._wrapper_core.get_status()
+                self._control_panel.update_button_states(current_status.server_state)
+
+    async def _shutdown(self) -> None:
+        """Perform graceful shutdown sequence.
+
+        1. Disables all interactive controls.
+        2. Shows "Shutting down..." status in the notification bar.
+        3. Invokes WrapperCore.quit() with a 30-second timeout.
+        4. Destroys the tkinter window.
+        5. Sets _running = False to exit the cooperative loop.
+
+        If quit() does not complete within 30 seconds, force-closes the window
+        and logs a warning. If quit() raises an exception, logs the error and
+        closes the window anyway.
+        """
+        if self._gui_state.shutdown_in_progress:
+            return
+
+        self._gui_state.shutdown_in_progress = True
+
+        # Disable all controls
+        self._disable_all_controls()
+
+        # Show "Shutting down..." status in the notification bar
+        self._show_shutdown_status()
+
+        try:
+            await asyncio.wait_for(self._wrapper_core.quit(), timeout=30.0)
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Shutdown timed out after 30 seconds, force-closing window"
+            )
+        except Exception as e:
+            logger.error("Error during shutdown: %s", e)
+
+        # Destroy the tkinter window and stop the loop
+        try:
+            self._root.destroy()
+        except tk.TclError:
+            pass  # Window already destroyed
+
+        self._running = False
+
+    def _show_shutdown_status(self) -> None:
+        """Display 'Shutting down...' status in the notification bar.
+
+        If the notification bar exists, shows an error-style (persistent)
+        notification with the shutdown message. This provides visual feedback
+        that the application is in the process of shutting down.
+        """
+        if hasattr(self, "_notification_bar") and self._notification_bar is not None:
+            self._notification_bar.show_error("Shutting down...")
+
+    def _disable_all_controls(self) -> None:
+        """Disable all interactive controls during shutdown.
+
+        Iterates through known widget attributes and disables them.
+        Uses hasattr() checks since widgets may not exist yet (e.g., if
+        _build_ui() hasn't been fully wired in task 8.1).
+
+        Disables:
+        - ControlPanel buttons (Start, Stop, Restart)
+        - SettingsEditor Apply button
+        - SettingsView Refresh button
+        - Quit button
+        - Help button
+        """
+        # Disable control panel buttons
+        if hasattr(self, "_control_panel") and self._control_panel is not None:
+            try:
+                self._control_panel.set_loading(True)
+            except tk.TclError:
+                pass
+
+        # Disable settings editor Apply button
+        if hasattr(self, "_settings_editor") and self._settings_editor is not None:
+            try:
+                if hasattr(self._settings_editor, "_apply_button"):
+                    self._settings_editor._apply_button.configure(state="disabled")
+            except tk.TclError:
+                pass
+
+        # Disable settings view Refresh button
+        if hasattr(self, "_settings_view") and self._settings_view is not None:
+            try:
+                if hasattr(self._settings_view, "_refresh_button"):
+                    self._settings_view._refresh_button.configure(state="disabled")
+            except tk.TclError:
+                pass
+
+        # Disable Quit button
+        if hasattr(self, "_quit_button") and self._quit_button is not None:
+            try:
+                self._quit_button.configure(state="disabled")
+            except tk.TclError:
+                pass
+
+        # Disable Help button
+        if hasattr(self, "_help_button") and self._help_button is not None:
+            try:
+                self._help_button.configure(state="disabled")
+            except tk.TclError:
+                pass
+
+
+class ControlPanel(ttk.LabelFrame):
+    """Server control buttons with state-aware enable/disable logic.
+
+    Provides "Start Server", "Stop Server", and "Restart Server" buttons
+    arranged in a horizontal row. Button states update automatically based
+    on the current ServerState:
+
+    - MONITORING: Start=enabled, Restart=enabled, Stop=disabled
+    - RUNNING: Start=disabled, Stop=enabled, Restart=enabled
+    - STARTING/STOPPING: All disabled, loading indicator shown
+    """
+
+    def __init__(
+        self,
+        parent: tk.Widget,
+        on_start: Callable[[], None],
+        on_stop: Callable[[], None],
+        on_restart: Callable[[], None],
+    ) -> None:
+        """Initialize the ControlPanel.
+
+        Args:
+            parent: The parent tkinter widget.
+            on_start: Callback invoked when the "Start Server" button is clicked.
+            on_stop: Callback invoked when the "Stop Server" button is clicked.
+            on_restart: Callback invoked when the "Restart Server" button is clicked.
+        """
+        super().__init__(parent, text="Server Control")
+
+        self._on_start = on_start
+        self._on_stop = on_stop
+        self._on_restart = on_restart
+
+        # Button container frame for horizontal layout
+        button_frame = ttk.Frame(self)
+        button_frame.pack(fill="x", padx=5, pady=5)
+
+        # Create server control buttons
+        self._start_button = ttk.Button(
+            button_frame, text="Start Server", command=self._on_start
+        )
+        self._start_button.pack(side="left", padx=(0, 5))
+
+        self._stop_button = ttk.Button(
+            button_frame, text="Stop Server", command=self._on_stop
+        )
+        self._stop_button.pack(side="left", padx=(0, 5))
+
+        self._restart_button = ttk.Button(
+            button_frame, text="Restart Server", command=self._on_restart
+        )
+        self._restart_button.pack(side="left", padx=(0, 5))
+
+        # Loading indicator label (hidden by default)
+        self._loading_label = ttk.Label(self, text="Operation in progress...")
+        # Do not pack yet — shown only when set_loading(True) is called
+
+        # Initialize with MONITORING state (default)
+        self.update_button_states(ServerState.MONITORING)
+
+    def update_button_states(self, state: ServerState) -> None:
+        """Enable/disable buttons based on current server state.
+
+        Args:
+            state: The current ServerState value.
+
+        Button enable/disable logic:
+            MONITORING: Start=enabled, Stop=disabled, Restart=enabled
+            RUNNING:    Start=disabled, Stop=enabled, Restart=enabled
+            STARTING/STOPPING: All disabled, loading indicator shown
+        """
+        if state == ServerState.MONITORING:
+            self._start_button.configure(state="normal")
+            self._stop_button.configure(state="disabled")
+            self._restart_button.configure(state="normal")
+            self._hide_loading()
+        elif state == ServerState.RUNNING:
+            self._start_button.configure(state="disabled")
+            self._stop_button.configure(state="normal")
+            self._restart_button.configure(state="normal")
+            self._hide_loading()
+        elif state in (ServerState.STARTING, ServerState.STOPPING):
+            self._start_button.configure(state="disabled")
+            self._stop_button.configure(state="disabled")
+            self._restart_button.configure(state="disabled")
+            self._show_loading()
+
+    def set_loading(self, loading: bool) -> None:
+        """Show/hide loading indicator and disable all buttons during operations.
+
+        Args:
+            loading: If True, disables all buttons and shows the loading indicator.
+                    If False, hides the loading indicator (button states should be
+                    updated separately via update_button_states()).
+        """
+        if loading:
+            self._start_button.configure(state="disabled")
+            self._stop_button.configure(state="disabled")
+            self._restart_button.configure(state="disabled")
+            self._show_loading()
+        else:
+            self._hide_loading()
+
+    def _show_loading(self) -> None:
+        """Show the loading indicator label."""
+        self._loading_label.pack(fill="x", padx=5, pady=(0, 5))
+
+    def _hide_loading(self) -> None:
+        """Hide the loading indicator label."""
+        self._loading_label.pack_forget()
+
+
+class NotificationBar(ttk.Frame):
+    """Status notification bar at the bottom of the main window.
+
+    Success messages auto-dismiss after 5 seconds.
+    Error messages persist until user dismisses them.
+
+    The bar is hidden when there is no active notification (uses pack_forget()).
+    Tracks the current after() callback ID so it can be cancelled if a new
+    notification replaces an old one.
+    """
+
+    def __init__(self, parent: tk.Widget) -> None:
+        """Initialize the NotificationBar.
+
+        Args:
+            parent: The parent tkinter widget (typically the root window or
+                    a container frame).
+        """
+        super().__init__(parent)
+
+        self._after_id: str | None = None
+        self._is_visible: bool = False
+
+        # Message label - takes up most of the horizontal space
+        self._message_label = ttk.Label(self, text="", anchor="w")
+        self._message_label.pack(side="left", fill="x", expand=True, padx=(5, 0))
+
+        # Dismiss button [x]
+        self._dismiss_button = ttk.Button(
+            self, text="\u00d7", width=3, command=self.dismiss
+        )
+        self._dismiss_button.pack(side="right", padx=(0, 5))
+
+        # Start hidden since there's no notification to show
+        self.pack_forget()
+
+    def show_success(self, message: str) -> None:
+        """Display a success notification that auto-dismisses after 5 seconds.
+
+        If a previous notification is visible, it is replaced. Any pending
+        auto-dismiss callback is cancelled before scheduling a new one.
+
+        Args:
+            message: The success message to display.
+        """
+        self._cancel_pending_dismiss()
+        self._message_label.configure(text=message, foreground="green")
+        self._show()
+
+        # Schedule auto-dismiss after 5 seconds (5000 ms)
+        self._after_id = self.winfo_toplevel().after(5000, self.dismiss)
+
+    def show_error(self, message: str) -> None:
+        """Display an error notification that persists until user dismisses.
+
+        If a previous notification is visible, it is replaced. Any pending
+        auto-dismiss callback is cancelled (errors do not auto-dismiss).
+
+        Args:
+            message: The error message to display.
+        """
+        self._cancel_pending_dismiss()
+        self._message_label.configure(text=message, foreground="red")
+        self._show()
+
+    def dismiss(self) -> None:
+        """Dismiss the current notification and hide the bar.
+
+        Cancels any pending auto-dismiss callback. Safe to call even when
+        no notification is visible.
+        """
+        self._cancel_pending_dismiss()
+        self._hide()
+
+    def _show(self) -> None:
+        """Make the notification bar visible."""
+        if not self._is_visible:
+            self.pack(side="bottom", fill="x", pady=(5, 0))
+            self._is_visible = True
+
+    def _hide(self) -> None:
+        """Hide the notification bar."""
+        if self._is_visible:
+            self.pack_forget()
+            self._is_visible = False
+
+    def _cancel_pending_dismiss(self) -> None:
+        """Cancel any pending auto-dismiss after() callback."""
+        if self._after_id is not None:
+            self.winfo_toplevel().after_cancel(self._after_id)
+            self._after_id = None
+
+
+
+class StatusDisplay(ttk.LabelFrame):
+    """Real-time server status display with conditional field visibility.
+
+    Displays: State (uppercase), Player Count, Idle Timer status,
+    Server PID (only when available), and Uptime (only when available).
+
+    Fields for Server PID and Uptime are completely omitted from the display
+    when their values are None, and shown when values are available.
+    The display is rebuilt on each update_status() call to handle the
+    conditional field presence cleanly.
+    """
+
+    def __init__(self, parent: tk.Widget, idle_timeout_threshold: int) -> None:
+        """Initialize the StatusDisplay.
+
+        Args:
+            parent: The parent tkinter widget.
+            idle_timeout_threshold: The configured idle timeout threshold in seconds,
+                used to display the idle timer format "{elapsed}s elapsed ({threshold}s threshold)".
+        """
+        super().__init__(parent, text="Server Status")
+
+        self._idle_timeout_threshold = idle_timeout_threshold
+
+        # Container frame for the status fields (rebuilt on each update)
+        self._fields_frame = ttk.Frame(self)
+        self._fields_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # Track current field labels for cleanup on rebuild
+        self._field_widgets: list[ttk.Label] = []
+
+        # Show initial placeholder state
+        self._build_fields(
+            state="MONITORING",
+            player_count=0,
+            idle_timer_text="Not active",
+            server_pid=None,
+            uptime_seconds=None,
+        )
+
+    def update_status(self, status: WrapperStatus) -> None:
+        """Update all status fields from a WrapperStatus snapshot.
+
+        Rebuilds the field display to handle conditional PID/uptime visibility.
+        Shows state in uppercase, formats idle timer based on active status,
+        and omits PID/uptime fields when their values are None.
+
+        Args:
+            status: The current WrapperStatus snapshot from WrapperCore.
+        """
+        # Format state as uppercase
+        state_text = status.server_state.name.upper()
+
+        # Format idle timer
+        if status.idle_timer_active:
+            idle_timer_text = (
+                f"{status.idle_seconds}s elapsed "
+                f"({self._idle_timeout_threshold}s threshold)"
+            )
+        else:
+            idle_timer_text = "Not active"
+
+        # Rebuild the display with current values
+        self._build_fields(
+            state=state_text,
+            player_count=status.player_count,
+            idle_timer_text=idle_timer_text,
+            server_pid=status.server_pid,
+            uptime_seconds=status.uptime_seconds,
+        )
+
+    def _build_fields(
+        self,
+        state: str,
+        player_count: int,
+        idle_timer_text: str,
+        server_pid: int | None,
+        uptime_seconds: int | None,
+    ) -> None:
+        """Rebuild the status field display.
+
+        Destroys existing field widgets and creates new ones based on current
+        values. Conditional fields (PID, Uptime) are only created when their
+        values are not None.
+
+        Args:
+            state: The server state text (uppercase).
+            player_count: Current connected player count.
+            idle_timer_text: Formatted idle timer display string.
+            server_pid: Server process PID, or None to omit the field.
+            uptime_seconds: Server uptime in seconds, or None to omit the field.
+        """
+        # Destroy existing field widgets
+        for widget in self._field_widgets:
+            widget.destroy()
+        self._field_widgets.clear()
+
+        row = 0
+
+        # State field (always shown)
+        state_label = ttk.Label(self._fields_frame, text=f"State:        {state}")
+        state_label.grid(row=row, column=0, sticky="w", pady=(0, 2))
+        self._field_widgets.append(state_label)
+        row += 1
+
+        # Player Count field (always shown)
+        players_label = ttk.Label(
+            self._fields_frame, text=f"Players:      {player_count}"
+        )
+        players_label.grid(row=row, column=0, sticky="w", pady=(0, 2))
+        self._field_widgets.append(players_label)
+        row += 1
+
+        # Idle Timer field (always shown, text varies)
+        idle_label = ttk.Label(
+            self._fields_frame, text=f"Idle Timer:   {idle_timer_text}"
+        )
+        idle_label.grid(row=row, column=0, sticky="w", pady=(0, 2))
+        self._field_widgets.append(idle_label)
+        row += 1
+
+        # Server PID field (conditional - only shown when not None)
+        if server_pid is not None:
+            pid_label = ttk.Label(
+                self._fields_frame, text=f"Server PID:   {server_pid}"
+            )
+            pid_label.grid(row=row, column=0, sticky="w", pady=(0, 2))
+            self._field_widgets.append(pid_label)
+            row += 1
+
+        # Uptime field (conditional - only shown when not None)
+        if uptime_seconds is not None:
+            uptime_label = ttk.Label(
+                self._fields_frame, text=f"Uptime:       {uptime_seconds}s"
+            )
+            uptime_label.grid(row=row, column=0, sticky="w", pady=(0, 2))
+            self._field_widgets.append(uptime_label)
+            row += 1
+
+
+
+class HelpDialog(tk.Toplevel):
+    """Modal help dialog with feature documentation.
+
+    Displays a scrollable read-only text area containing descriptions of all
+    GUI features: server control buttons, status display fields, settings view,
+    settings editor workflow, and the quit button.
+
+    The dialog is non-blocking (uses transient() and grab_set() for focus but
+    does not call wait_window()), allowing the user to dismiss it and return
+    to the main interface without affecting server state.
+
+    Window title: "Help - Palworld Server Wrapper"
+    Size: 600x400 pixels
+    """
+
+    HELP_CONTENT = """\
+=== Server Control ===
+
+Start Server
+  Starts the Palworld dedicated server process. The server will transition \
+from MONITORING state to STARTING, then to RUNNING once fully initialized.
+
+Stop Server
+  Gracefully stops the running server. The server will transition from \
+RUNNING to STOPPING, then back to MONITORING once fully shut down.
+
+Restart Server
+  Stops the server (if running) and starts it again. This is equivalent to \
+performing a Stop followed by a Start.
+
+=== Server Status ===
+
+State
+  Displays the current server lifecycle state (MONITORING, STARTING, \
+RUNNING, or STOPPING).
+
+Players
+  Shows the number of players currently connected to the server.
+
+Idle Timer
+  When active, shows how long the server has been idle (no players connected) \
+and the configured threshold before automatic shutdown. Displays "Not active" \
+when players are connected or the timer is disabled.
+
+Server PID
+  The process ID of the running server. Only displayed while the server is running.
+
+Uptime
+  How long the server has been running in seconds. Only displayed while the \
+server is active.
+
+=== Server Settings ===
+
+Displays all settings read from PalWorldSettings.ini sorted alphabetically \
+in "Key = Value" format. Password values are masked with "********" for security.
+
+Click "Refresh" to reload settings from the configuration file.
+
+=== Modify Setting ===
+
+Enter a setting key name and a new value to modify server configuration.
+
+The system validates and auto-corrects values based on the setting type:
+  - Booleans are normalized to True/False
+  - Integers are checked against min/max ranges
+  - Floats are checked against min/max ranges
+  - Enums are validated against allowed values
+
+If auto-correction is applied, both the original and corrected values are shown.
+If validation fails, an error message is displayed and no changes are written.
+
+If the server is currently running, a warning is shown indicating that a \
+restart is required for changes to take effect.
+
+Unknown setting keys are written as raw strings without type validation.
+
+=== Quit ===
+
+Gracefully shuts down the wrapper, stopping the server if running, and \
+closes the application window. The shutdown process has a 30-second timeout \
+to ensure the application does not hang indefinitely.
+"""
+
+    def __init__(self, parent: tk.Widget) -> None:
+        """Initialize the HelpDialog.
+
+        Creates a Toplevel window with scrollable help text content and a
+        Close button. The dialog is set as transient to the parent and
+        grabs focus via grab_set().
+
+        Args:
+            parent: The parent tkinter widget (typically the root window).
+        """
+        super().__init__(parent)
+
+        self.title("Help - Palworld Server Wrapper")
+        self.geometry("600x400")
+        self.resizable(True, True)
+
+        # Set as transient to parent (keeps dialog above parent window)
+        self.transient(parent)
+
+        self._build_content()
+
+        # Grab focus so the dialog is the active window
+        self.grab_set()
+        self.focus_set()
+
+    def _build_content(self) -> None:
+        """Build the scrollable help text content and Close button.
+
+        Creates a read-only Text widget with a vertical scrollbar for the
+        help content, and a Close button at the bottom to dismiss the dialog.
+
+        If help content cannot be loaded (resource failure), displays an
+        error message instead.
+        """
+        # Content frame for the text widget and scrollbar
+        content_frame = ttk.Frame(self)
+        content_frame.pack(fill="both", expand=True, padx=10, pady=(10, 5))
+
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(content_frame)
+        scrollbar.pack(side="right", fill="y")
+
+        # Read-only text widget for help content
+        self._text_widget = tk.Text(
+            content_frame,
+            wrap="word",
+            yscrollcommand=scrollbar.set,
+            padx=10,
+            pady=10,
+        )
+        self._text_widget.pack(side="left", fill="both", expand=True)
+        scrollbar.configure(command=self._text_widget.yview)
+
+        # Insert help content
+        try:
+            self._text_widget.insert("1.0", self.HELP_CONTENT)
+        except Exception:
+            self._text_widget.insert(
+                "1.0", "Error: Help content is unavailable."
+            )
+
+        # Make the text widget read-only
+        self._text_widget.configure(state="disabled")
+
+        # Close button at the bottom
+        button_frame = ttk.Frame(self)
+        button_frame.pack(fill="x", padx=10, pady=(5, 10))
+
+        close_button = ttk.Button(
+            button_frame, text="Close", command=self.destroy
+        )
+        close_button.pack(side="right")
+
+
+class SettingsView(ttk.LabelFrame):
+    """Read-only display of all server settings with password masking.
+
+    Displays settings from PalWorldSettings.ini sorted alphabetically by key
+    in "Key = Value" format. Password-containing keys have their values masked
+    with "********". Provides a Refresh button to re-read the settings file.
+
+    Handles error conditions:
+    - If SettingsParser returns a dict with "__error__" key, displays only
+      the error message (no setting rows).
+    - If SettingsParser returns an empty dict, displays an informational
+      message indicating no settings were found.
+    """
+
+    def __init__(self, parent: tk.Widget, config: WrapperConfig) -> None:
+        """Initialize the SettingsView.
+
+        Args:
+            parent: The parent tkinter widget.
+            config: The wrapper configuration (provides settings_file_path).
+        """
+        super().__init__(parent, text="Server Settings")
+
+        self._config = config
+
+        # Content frame holds the text widget and scrollbar
+        content_frame = ttk.Frame(self)
+        content_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # Scrollbar for the text widget
+        scrollbar = ttk.Scrollbar(content_frame)
+        scrollbar.pack(side="right", fill="y")
+
+        # Read-only text widget for displaying settings
+        self._text_widget = tk.Text(
+            content_frame,
+            wrap="none",
+            state="disabled",
+            yscrollcommand=scrollbar.set,
+            height=10,
+        )
+        self._text_widget.pack(side="left", fill="both", expand=True)
+        scrollbar.configure(command=self._text_widget.yview)
+
+        # Refresh button at the bottom
+        self._refresh_button = ttk.Button(
+            self, text="Refresh", command=self.refresh
+        )
+        self._refresh_button.pack(anchor="e", padx=5, pady=(0, 5))
+
+        # Populate initial data
+        self.refresh()
+
+    def refresh(self) -> None:
+        """Re-read settings from file and update the display.
+
+        Uses SettingsParser.read_settings() with the configured settings file
+        path. Handles error and empty-dict cases appropriately.
+        """
+        settings = SettingsParser.read_settings(self._config.settings_file_path)
+        self._display_settings(settings)
+
+    def _display_settings(self, settings: dict) -> None:
+        """Render settings in the text widget.
+
+        Args:
+            settings: Dictionary of settings from SettingsParser.read_settings().
+                      May contain "__error__" key for error conditions, or be
+                      empty for the no-settings-found case.
+        """
+        self._text_widget.configure(state="normal")
+        self._text_widget.delete("1.0", "end")
+
+        if "__error__" in settings:
+            # Display only the error message, no setting rows
+            self._text_widget.insert("1.0", settings["__error__"])
+        elif not settings:
+            # Empty dict: no settings found
+            self._text_widget.insert(
+                "1.0", "No settings found in configuration file."
+            )
+        else:
+            # Sort alphabetically by key and display
+            lines = []
+            for key in sorted(settings.keys()):
+                if is_password_setting(key):
+                    lines.append(f"{key} = {PASSWORD_MASK}")
+                else:
+                    lines.append(f"{key} = {settings[key]}")
+            self._text_widget.insert("1.0", "\n".join(lines))
+
+        self._text_widget.configure(state="disabled")
+
+
+
+
+class SettingsEditor(ttk.LabelFrame):
+    """Setting modification with type validation and auto-correction feedback.
+
+    Provides input fields for specifying a setting key and value, validates
+    using the shared validation logic from src/validation.py, displays
+    auto-correction feedback when applicable, and writes the setting to
+    PalWorldSettings.ini via SettingsParser.
+
+    Unknown keys (not in SETTING_DEFINITIONS) are written as raw strings
+    without type validation per Requirement 6.9.
+
+    On success: shows confirmation, triggers on_setting_changed callback
+    (to refresh SettingsView), and warns if server is RUNNING.
+    """
+
+    MAX_KEY_LENGTH = 128
+    MAX_VALUE_LENGTH = 1024
+
+    def __init__(
+        self,
+        parent: tk.Widget,
+        config: WrapperConfig,
+        wrapper_core: WrapperCore,
+        on_setting_changed: Callable[[], None],
+    ) -> None:
+        """Initialize the SettingsEditor.
+
+        Args:
+            parent: The parent tkinter widget.
+            config: The wrapper configuration (provides settings_file_path).
+            wrapper_core: The WrapperCore instance (for checking server state).
+            on_setting_changed: Callback invoked (no arguments) after a setting
+                is successfully written, used to refresh SettingsView.
+        """
+        super().__init__(parent, text="Modify Setting")
+
+        self._config = config
+        self._wrapper_core = wrapper_core
+        self._on_setting_changed = on_setting_changed
+
+        # Input fields frame
+        input_frame = ttk.Frame(self)
+        input_frame.pack(fill="x", padx=5, pady=5)
+
+        # Key input field
+        ttk.Label(input_frame, text="Key:").pack(side="left", padx=(0, 5))
+        self._key_var = tk.StringVar()
+        self._key_var.trace_add("write", self._limit_key_length)
+        self._key_entry = ttk.Entry(input_frame, textvariable=self._key_var, width=30)
+        self._key_entry.pack(side="left", padx=(0, 10))
+
+        # Value input field
+        ttk.Label(input_frame, text="Value:").pack(side="left", padx=(0, 5))
+        self._value_var = tk.StringVar()
+        self._value_var.trace_add("write", self._limit_value_length)
+        self._value_entry = ttk.Entry(
+            input_frame, textvariable=self._value_var, width=30
+        )
+        self._value_entry.pack(side="left", padx=(0, 10))
+
+        # Apply button
+        self._apply_button = ttk.Button(
+            input_frame, text="Apply", command=self._on_submit
+        )
+        self._apply_button.pack(side="left")
+
+        # Feedback label (shows messages below the inputs)
+        self._feedback_label = ttk.Label(self, text="", wraplength=700)
+        self._feedback_label.pack(fill="x", padx=5, pady=(0, 5))
+
+    def _limit_key_length(self, *args) -> None:
+        """Limit key entry to MAX_KEY_LENGTH characters via StringVar trace."""
+        current = self._key_var.get()
+        if len(current) > self.MAX_KEY_LENGTH:
+            self._key_var.set(current[: self.MAX_KEY_LENGTH])
+
+    def _limit_value_length(self, *args) -> None:
+        """Limit value entry to MAX_VALUE_LENGTH characters via StringVar trace."""
+        current = self._value_var.get()
+        if len(current) > self.MAX_VALUE_LENGTH:
+            self._value_var.set(current[: self.MAX_VALUE_LENGTH])
+
+    def _on_submit(self) -> None:
+        """Handle the Apply button click.
+
+        Validation and write workflow:
+        1. Get key and value from entry fields
+        2. Validate key is non-empty
+        3. Call validate_and_correct(key, value) from src/validation.py
+        4. If result is a string (error), display it in feedback label (red)
+        5. If result is CorrectionResult, proceed to write
+        6. If was_corrected, show auto-correction feedback (blue/info color)
+        7. Call SettingsParser.write_setting(config.settings_file_path, key, result.value)
+        8. If write fails, show error in feedback label (red)
+        9. On success: show confirmation, call on_setting_changed callback
+        10. If server is RUNNING, append restart warning to feedback
+        """
+        key = self._key_var.get().strip()
+        value = self._value_var.get()
+
+        # Validate key is non-empty
+        if not key:
+            self._show_feedback("Error: Setting key cannot be empty.", is_error=True)
+            return
+
+        # Validate and auto-correct using shared validation logic
+        result = validate_and_correct(key, value)
+
+        # If result is a string, it's an error message
+        if isinstance(result, str):
+            self._show_feedback(result, is_error=True)
+            return
+
+        # result is a CorrectionResult — show auto-correction feedback if applicable
+        if result.was_corrected:
+            correction_msg = (
+                f"Auto-corrected: '{result.original_input}' \u2192 '{result.value}'"
+            )
+            self._show_feedback(correction_msg, is_error=False, is_info=True)
+
+        # Write the setting to file
+        try:
+            write_result = SettingsParser.write_setting(
+                self._config.settings_file_path, key, result.value
+            )
+        except Exception as e:
+            self._show_feedback(
+                f"Error: File system error: {e}", is_error=True
+            )
+            return
+
+        # Check write result
+        if not write_result.valid:
+            error_msg = write_result.error_message or "Unknown write error."
+            self._show_feedback(f"Error: {error_msg}", is_error=True)
+            return
+
+        # Success: show confirmation message
+        confirmation = f"Setting '{key}' set to '{result.value}' successfully."
+
+        # Check if server is RUNNING and append restart warning
+        try:
+            status = self._wrapper_core.get_status()
+            if status.server_state == ServerState.RUNNING:
+                confirmation += (
+                    " Warning: Server is running. A restart is required "
+                    "for this change to take effect."
+                )
+        except Exception:
+            # If we can't get status, just skip the warning
+            pass
+
+        # Show the final feedback (may include auto-correction info + confirmation)
+        if result.was_corrected:
+            correction_msg = (
+                f"Auto-corrected: '{result.original_input}' \u2192 '{result.value}'. "
+            )
+            self._show_feedback(correction_msg + confirmation, is_error=False, is_info=True)
+        else:
+            self._show_feedback(confirmation, is_error=False)
+
+        # Trigger SettingsView refresh via the callback
+        try:
+            self._on_setting_changed()
+        except Exception as e:
+            logger.error("Error in on_setting_changed callback: %s", e)
+
+    def _show_feedback(
+        self, message: str, is_error: bool = False, is_info: bool = False
+    ) -> None:
+        """Display a feedback message in the feedback label.
+
+        Args:
+            message: The message to display.
+            is_error: If True, display in red color.
+            is_info: If True, display in blue/info color (for auto-correction).
+        """
+        if is_error:
+            self._feedback_label.configure(text=message, foreground="red")
+        elif is_info:
+            self._feedback_label.configure(text=message, foreground="blue")
+        else:
+            self._feedback_label.configure(text=message, foreground="green")

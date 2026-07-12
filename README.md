@@ -4,12 +4,13 @@ A lightweight wrapper that manages your Palworld Dedicated Server process on Win
 
 ## Features
 
+- **GUI management interface** — A graphical window with buttons for server control, real-time status display, settings viewer/editor, and help documentation. Launches by default.
 - **Auto-start on connect** — The wrapper listens on the game port. When a player tries to join, it launches the server automatically.
 - **Auto-shutdown on idle** — After 5 minutes (configurable) with no players connected, the server shuts down gracefully.
 - **Scheduled maintenance** — Automatically restarts the server at a configurable interval (default 6 hours), broadcasts a warning to players beforehand, and optionally updates the server via SteamCMD.
 - **Player monitoring** — Tracks connected players via RCON polling.
-- **CLI management** — Start, stop, restart, check status, and modify server settings from an interactive prompt.
-- **Settings editor** — View and modify `PalWorldSettings.ini` values with type/range validation, without editing the file by hand.
+- **Dual interface modes** — Choose between a GUI (default) or console interface via `--interface gui|console`.
+- **Settings editor** — View and modify `PalWorldSettings.ini` values with type/range validation, without editing the file by hand (available in both GUI and console modes).
 - **Crash recovery** — If the server process dies unexpectedly, the wrapper resumes monitoring for new connections.
 - **Logging** — Rotating log file with timestamped entries for state changes, player events, and errors.
 
@@ -19,6 +20,7 @@ A lightweight wrapper that manages your Palworld Dedicated Server process on Win
 - Python 3.11+
 - Palworld Dedicated Server installed (via Steam)
 - RCON enabled in your server settings (`RCONEnabled=True`, with a password set)
+- **tkinter** — included in the Python standard library (no additional install needed). Required for the GUI interface.
 
 ## Installation
 
@@ -46,6 +48,7 @@ python -m src.main --server-exe <path> --settings-file <path> --rcon-password <p
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--interface` | `gui` | Interface mode: `gui` (graphical window) or `console` (interactive prompt) |
 | `--server-exe` | *(required)* | Path to `PalServer.exe` |
 | `--settings-file` | *(required)* | Path to `PalWorldSettings.ini` |
 | `--rcon-password` | `""` | RCON admin password |
@@ -59,9 +62,30 @@ python -m src.main --server-exe <path> --settings-file <path> --rcon-password <p
 | `--poll-interval` | `10` | Seconds between player count checks (1–30) |
 | `--log-file` | `wrapper.log` | Log file path |
 
-## Interactive Commands
+## GUI Interface
 
-Once running, the wrapper presents a `>` prompt:
+By default, the wrapper launches a graphical management window (title: "Palworld Server Wrapper", minimum size 800×600).
+
+### GUI Features
+
+| Section | Description |
+|---------|-------------|
+| **Server Control** | Start, Stop, and Restart buttons. Buttons are enabled/disabled based on the current server state. A loading indicator appears during operations. |
+| **Status Display** | Real-time display of server state, player count, idle timer, server PID, and uptime. Refreshes automatically every 1 second. |
+| **Settings View** | All server settings shown alphabetically. Password values are masked. Includes a Refresh button. |
+| **Settings Editor** | Modify any setting by entering a key and value. Type-aware validation and auto-correction feedback is shown before writing. |
+| **Help** | Opens a dialog describing all GUI controls and fields. |
+| **Quit** | Gracefully shuts down the server and closes the wrapper (same as closing the window). |
+
+To use the console interface instead:
+
+```bash
+palworld-wrapper --interface console --server-exe <path> --settings-file <path> --rcon-password <password>
+```
+
+## Console Interface (Interactive Commands)
+
+When running with `--interface console`, the wrapper presents a `>` prompt:
 
 | Command | Description |
 |---------|-------------|
