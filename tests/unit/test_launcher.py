@@ -180,7 +180,7 @@ class TestDetachAndRespawn:
 
         call_args = mock_popen.call_args
         cmd = call_args[0][0]
-        assert cmd[0] == "/path/to/pythonw.exe"
+        assert cmd[0] == str(Path("/path/to/pythonw.exe"))
 
     @patch("src.launcher.resolve_pythonw", return_value=None)
     @patch("src.launcher.subprocess.Popen")
