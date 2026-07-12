@@ -1594,6 +1594,7 @@ class TestHelpDialog:
 
     def test_window_geometry_is_600x400(self, help_dialog):
         """HelpDialog should be sized 600x400."""
+        help_dialog.update_idletasks()
         geo = help_dialog.geometry()
         # geometry() returns "600x400+X+Y" format
         assert geo.startswith("600x400")
@@ -1818,7 +1819,7 @@ class TestSettingsEditor:
 
         feedback_text = settings_editor._feedback_label.cget("text")
         assert "cannot be empty" in feedback_text
-        assert settings_editor._feedback_label.cget("foreground") == "red"
+        assert str(settings_editor._feedback_label.cget("foreground")) == "red"
 
     def test_whitespace_only_key_shows_error(self, settings_editor):
         """Submitting with whitespace-only key should show error."""
@@ -1842,7 +1843,7 @@ class TestSettingsEditor:
 
         feedback_text = settings_editor._feedback_label.cget("text")
         assert "Error" in feedback_text
-        assert settings_editor._feedback_label.cget("foreground") == "red"
+        assert str(settings_editor._feedback_label.cget("foreground")) == "red"
 
     @patch("src.gui_interface.validate_and_correct")
     def test_validation_error_does_not_write_file(
@@ -1880,7 +1881,7 @@ class TestSettingsEditor:
         assert "Auto-corrected" in feedback_text
         assert "'true'" in feedback_text
         assert "'True'" in feedback_text
-        assert settings_editor._feedback_label.cget("foreground") == "blue"
+        assert str(settings_editor._feedback_label.cget("foreground")) == "blue"
 
     @patch("src.gui_interface.SettingsParser.write_setting")
     @patch("src.gui_interface.validate_and_correct")
@@ -1903,7 +1904,7 @@ class TestSettingsEditor:
         feedback_text = settings_editor._feedback_label.cget("text")
         assert "successfully" in feedback_text
         assert "ExpRate" in feedback_text
-        assert settings_editor._feedback_label.cget("foreground") == "green"
+        assert str(settings_editor._feedback_label.cget("foreground")) == "green"
 
     @patch("src.gui_interface.SettingsParser.write_setting")
     @patch("src.gui_interface.validate_and_correct")
@@ -1978,7 +1979,7 @@ class TestSettingsEditor:
         feedback_text = settings_editor._feedback_label.cget("text")
         assert "Error" in feedback_text
         assert "File not found" in feedback_text
-        assert settings_editor._feedback_label.cget("foreground") == "red"
+        assert str(settings_editor._feedback_label.cget("foreground")) == "red"
 
     @patch("src.gui_interface.SettingsParser.write_setting")
     @patch("src.gui_interface.validate_and_correct")
@@ -2022,7 +2023,7 @@ class TestSettingsEditor:
         feedback_text = settings_editor._feedback_label.cget("text")
         assert "Error" in feedback_text
         assert "Permission denied" in feedback_text
-        assert settings_editor._feedback_label.cget("foreground") == "red"
+        assert str(settings_editor._feedback_label.cget("foreground")) == "red"
 
     @patch("src.gui_interface.validate_and_correct")
     def test_unknown_key_passes_validation(self, mock_validate, settings_editor):
