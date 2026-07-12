@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from src.config import WrapperConfig
 from src.models import ServerState, WrapperStatus
 from src.pending_settings import ApplyResult, PendingSettingsQueue
+from src.settings_panel import SettingsPanel
 from src.settings_parser import SettingsParser
 from src.settings_write_handler import SettingsWriteHandler
 from src.validation import CorrectionResult, PASSWORD_MASK, is_password_setting, validate_and_correct
@@ -101,10 +102,12 @@ class GuiInterface:
         1. ControlPanel - Server control buttons (Start/Stop/Restart)
         2. StatusDisplay - Real-time server status fields
         3. OutputPanel - Operational log output
-        4. SettingsView - Read-only settings display (expandable)
-        5. SettingsEditor - Setting modification form
-        6. Button frame - Help and Quit buttons
-        7. NotificationBar - Success/error notification display (bottom)
+        4. SettingsPanel - Unified settings display and modification
+        5. Button frame - Help and Quit buttons
+        6. NotificationBar - Success/error notification display (bottom)
+
+        Note: NotificationBar is instantiated before SettingsPanel (since the
+        panel uses it for notifications) but packed at the bottom of the layout.
 
         All widget instances are stored as self._ attributes so
         _disable_all_controls() and other methods can access them.
@@ -135,21 +138,20 @@ class GuiInterface:
         self._output_panel = OutputPanel(self._root)
         self._output_panel.pack(fill="both", expand=True, padx=10, pady=5)
 
-        # 4. Settings View - Read-only settings list (gets expand=True for extra space)
-        self._settings_view = SettingsView(self._root, config=self._config)
-        self._settings_view.pack(fill="both", expand=True, padx=10, pady=5)
+        # NotificationBar created early (SettingsPanel needs it), packed at the bottom later
+        self._notification_bar = NotificationBar(self._root)
 
-        # 5. Settings Editor - Modify setting form
-        self._settings_editor = SettingsEditor(
-            self._root,
+        # 4. SettingsPanel - Unified settings display and modification
+        self._settings_panel = SettingsPanel(
+            parent=self._root,
             config=self._config,
             wrapper_core=self._wrapper_core,
-            on_setting_changed=self._settings_view.refresh,
             settings_write_handler=self._settings_write_handler,
+            notification_bar=self._notification_bar,
         )
-        self._settings_editor.pack(fill="x", padx=10, pady=5)
+        self._settings_panel.pack(fill="both", expand=True, padx=10, pady=5)
 
-        # 6. Button frame - Help and Quit buttons
+        # 5. Button frame - Help and Quit buttons
         button_frame = ttk.Frame(self._root)
         button_frame.pack(fill="x", padx=10, pady=5)
 
@@ -167,8 +169,8 @@ class GuiInterface:
         )
         self._quit_button.pack(side="right")
 
-        # 7. Notification Bar - Success/error messages (handles its own visibility)
-        self._notification_bar = NotificationBar(self._root)
+        # 6. NotificationBar is already instantiated above; its pack() is
+        # handled by its own show_success/show_error methods (starts hidden)
 
     def _schedule_status_refresh(self) -> None:
         """Schedule periodic status display updates (every 1 second).
@@ -215,9 +217,9 @@ class GuiInterface:
             ):
                 self._control_panel.update_button_states(status.server_state)
 
-            # Update pending indicator in settings editor
-            if hasattr(self, "_settings_editor") and self._settings_editor is not None:
-                self._settings_editor.update_pending_indicator()
+            # Update pending indicator in settings panel
+            if hasattr(self, "_settings_panel") and self._settings_panel is not None:
+                self._settings_panel.update_pending_indicator()
 
         except Exception as e:
             logger.error("Error refreshing status: %s", e)
@@ -267,8 +269,8 @@ class GuiInterface:
             msg = f"{result.applied_count} pending setting(s) applied."
             if hasattr(self, "_notification_bar") and self._notification_bar is not None:
                 self._notification_bar.show_success(msg)
-        if hasattr(self, "_settings_editor") and self._settings_editor is not None:
-            self._settings_editor.update_pending_indicator()
+        if hasattr(self, "_settings_panel") and self._settings_panel is not None:
+            self._settings_panel.update_pending_indicator()
 
     async def _execute_server_operation(self, operation: str) -> None:
         """Execute a server control operation in a non-blocking manner.
@@ -404,19 +406,11 @@ class GuiInterface:
             except tk.TclError:
                 pass
 
-        # Disable settings editor Apply button
-        if hasattr(self, "_settings_editor") and self._settings_editor is not None:
+        # Disable settings panel Refresh button
+        if hasattr(self, "_settings_panel") and self._settings_panel is not None:
             try:
-                if hasattr(self._settings_editor, "_apply_button"):
-                    self._settings_editor._apply_button.configure(state="disabled")
-            except tk.TclError:
-                pass
-
-        # Disable settings view Refresh button
-        if hasattr(self, "_settings_view") and self._settings_view is not None:
-            try:
-                if hasattr(self._settings_view, "_refresh_button"):
-                    self._settings_view._refresh_button.configure(state="disabled")
+                if hasattr(self._settings_panel, "_refresh_button"):
+                    self._settings_panel._refresh_button.configure(state="disabled")
             except tk.TclError:
                 pass
 

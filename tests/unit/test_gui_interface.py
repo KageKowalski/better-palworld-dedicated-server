@@ -409,38 +409,20 @@ class TestShutdownControls:
         gui._control_panel.set_loading.assert_called_once_with(True)
 
     @patch("src.gui_interface.tk.Tk")
-    def test_disable_all_controls_disables_settings_editor_apply_button(
+    def test_disable_all_controls_disables_settings_panel_refresh_button(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
-        """_disable_all_controls() should disable the SettingsEditor Apply button."""
+        """_disable_all_controls() should disable the SettingsPanel Refresh button."""
         mock_root = MagicMock()
         mock_tk_class.return_value = mock_root
 
         gui = GuiInterface(mock_wrapper_core, config)
-        gui._settings_editor = MagicMock()
-        gui._settings_editor._apply_button = MagicMock()
+        gui._settings_panel = MagicMock()
+        gui._settings_panel._refresh_button = MagicMock()
 
         gui._disable_all_controls()
 
-        gui._settings_editor._apply_button.configure.assert_called_once_with(
-            state="disabled"
-        )
-
-    @patch("src.gui_interface.tk.Tk")
-    def test_disable_all_controls_disables_settings_view_refresh_button(
-        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
-    ):
-        """_disable_all_controls() should disable the SettingsView Refresh button."""
-        mock_root = MagicMock()
-        mock_tk_class.return_value = mock_root
-
-        gui = GuiInterface(mock_wrapper_core, config)
-        gui._settings_view = MagicMock()
-        gui._settings_view._refresh_button = MagicMock()
-
-        gui._disable_all_controls()
-
-        gui._settings_view._refresh_button.configure.assert_called_once_with(
+        gui._settings_panel._refresh_button.configure.assert_called_once_with(
             state="disabled"
         )
 
@@ -597,8 +579,7 @@ class TestShutdownControls:
 
         gui = GuiInterface(mock_wrapper_core, config)
         gui._control_panel = None
-        gui._settings_editor = None
-        gui._settings_view = None
+        gui._settings_panel = None
         gui._quit_button = None
         gui._help_button = None
 
@@ -849,7 +830,7 @@ class TestGracefulShutdownDetachedProcess:
     async def test_shutdown_disables_all_interactive_controls(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
-        """Shutdown disables Start/Stop/Restart, Apply, Refresh, Help, Quit buttons.
+        """Shutdown disables Start/Stop/Restart, Refresh, Help, Quit buttons.
 
         Validates Requirement 5.1: disable all interactive controls.
         """
@@ -858,10 +839,8 @@ class TestGracefulShutdownDetachedProcess:
 
         gui = GuiInterface(mock_wrapper_core, config)
         gui._control_panel = MagicMock()
-        gui._settings_editor = MagicMock()
-        gui._settings_editor._apply_button = MagicMock()
-        gui._settings_view = MagicMock()
-        gui._settings_view._refresh_button = MagicMock()
+        gui._settings_panel = MagicMock()
+        gui._settings_panel._refresh_button = MagicMock()
         gui._quit_button = MagicMock()
         gui._help_button = MagicMock()
 
@@ -869,10 +848,8 @@ class TestGracefulShutdownDetachedProcess:
 
         # Control panel should be set to loading (all buttons disabled)
         gui._control_panel.set_loading.assert_called_with(True)
-        # Settings editor Apply button should be disabled
-        gui._settings_editor._apply_button.configure.assert_called_with(state="disabled")
-        # Settings view Refresh button should be disabled
-        gui._settings_view._refresh_button.configure.assert_called_with(state="disabled")
+        # Settings panel Refresh button should be disabled
+        gui._settings_panel._refresh_button.configure.assert_called_with(state="disabled")
         # Quit button should be disabled
         gui._quit_button.configure.assert_called_with(state="disabled")
         # Help button should be disabled
