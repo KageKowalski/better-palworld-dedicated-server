@@ -19,7 +19,9 @@ from dataclasses import dataclass, field
 
 from src.config import WrapperConfig
 from src.models import ServerState, WrapperStatus
+from src.pending_settings import ApplyResult, PendingSettingsQueue
 from src.settings_parser import SettingsParser
+from src.settings_write_handler import SettingsWriteHandler
 from src.validation import CorrectionResult, PASSWORD_MASK, is_password_setting, validate_and_correct
 from src.wrapper_core import WrapperCore
 
@@ -67,6 +69,12 @@ class GuiInterface:
         """
         self._wrapper_core = wrapper_core
         self._config = config
+        self._settings_write_handler = SettingsWriteHandler(
+            wrapper_core=wrapper_core,
+            pending_queue=wrapper_core.pending_queue,
+            settings_file_path=config.settings_file_path,
+        )
+        wrapper_core.register_apply_callback(self._on_apply_result)
         self._running = False
         self._gui_state = GuiState()
         self._notification_state = NotificationState()
@@ -137,6 +145,7 @@ class GuiInterface:
             config=self._config,
             wrapper_core=self._wrapper_core,
             on_setting_changed=self._settings_view.refresh,
+            settings_write_handler=self._settings_write_handler,
         )
         self._settings_editor.pack(fill="x", padx=10, pady=5)
 
@@ -206,6 +215,10 @@ class GuiInterface:
             ):
                 self._control_panel.update_button_states(status.server_state)
 
+            # Update pending indicator in settings editor
+            if hasattr(self, "_settings_editor") and self._settings_editor is not None:
+                self._settings_editor.update_pending_indicator()
+
         except Exception as e:
             logger.error("Error refreshing status: %s", e)
 
@@ -242,6 +255,20 @@ class GuiInterface:
         Schedules the async _shutdown() method as a task on the running event loop.
         """
         asyncio.ensure_future(self._shutdown())
+
+    def _on_apply_result(self, result: ApplyResult) -> None:
+        """Handle notification when pending settings are applied."""
+        if result.failed_key is not None:
+            error_msg = result.error_message or "Unknown error"
+            msg = f"Failed to apply pending settings: {error_msg}. {result.remaining_count} change(s) remain queued."
+            if hasattr(self, "_notification_bar") and self._notification_bar is not None:
+                self._notification_bar.show_error(msg)
+        elif result.applied_count > 0:
+            msg = f"{result.applied_count} pending setting(s) applied."
+            if hasattr(self, "_notification_bar") and self._notification_bar is not None:
+                self._notification_bar.show_success(msg)
+        if hasattr(self, "_settings_editor") and self._settings_editor is not None:
+            self._settings_editor.update_pending_indicator()
 
     async def _execute_server_operation(self, operation: str) -> None:
         """Execute a server control operation in a non-blocking manner.
@@ -1098,6 +1125,7 @@ class SettingsEditor(ttk.LabelFrame):
         config: WrapperConfig,
         wrapper_core: WrapperCore,
         on_setting_changed: Callable[[], None],
+        settings_write_handler: "SettingsWriteHandler | None" = None,
     ) -> None:
         """Initialize the SettingsEditor.
 
@@ -1107,12 +1135,14 @@ class SettingsEditor(ttk.LabelFrame):
             wrapper_core: The WrapperCore instance (for checking server state).
             on_setting_changed: Callback invoked (no arguments) after a setting
                 is successfully written, used to refresh SettingsView.
+            settings_write_handler: Optional SettingsWriteHandler for routing writes.
         """
         super().__init__(parent, text="Modify Setting")
 
         self._config = config
         self._wrapper_core = wrapper_core
         self._on_setting_changed = on_setting_changed
+        self._settings_write_handler = settings_write_handler
 
         # Input fields frame
         input_frame = ttk.Frame(self)
@@ -1144,6 +1174,11 @@ class SettingsEditor(ttk.LabelFrame):
         self._feedback_label = ttk.Label(self, text="", wraplength=700)
         self._feedback_label.pack(fill="x", padx=5, pady=(0, 5))
 
+        # Pending indicator label (shows pending count when queue is non-empty in unsafe state)
+        self._pending_indicator = ttk.Label(self, text="", foreground="orange")
+        self._pending_indicator.pack(fill="x", padx=5, pady=(0, 5))
+        self._pending_indicator.pack_forget()  # Hidden initially
+
     def _limit_key_length(self, *args) -> None:
         """Limit key entry to MAX_KEY_LENGTH characters via StringVar trace."""
         current = self._key_var.get()
@@ -1159,17 +1194,18 @@ class SettingsEditor(ttk.LabelFrame):
     def _on_submit(self) -> None:
         """Handle the Apply button click.
 
-        Validation and write workflow:
+        Routes through SettingsWriteHandler when available (with fallback to
+        original direct-write code if None).
+
+        Workflow with SettingsWriteHandler:
         1. Get key and value from entry fields
         2. Validate key is non-empty
-        3. Call validate_and_correct(key, value) from src/validation.py
-        4. If result is a string (error), display it in feedback label (red)
-        5. If result is CorrectionResult, proceed to write
-        6. If was_corrected, show auto-correction feedback (blue/info color)
-        7. Call SettingsParser.write_setting(config.settings_file_path, key, result.value)
-        8. If write fails, show error in feedback label (red)
-        9. On success: show confirmation, call on_setting_changed callback
-        10. If server is RUNNING, append restart warning to feedback
+        3. Call validate_and_correct(key, value) for user-facing auto-correction
+        4. If validation error, show in feedback label (red)
+        5. If CorrectionResult, submit via SettingsWriteHandler.submit()
+        6. Display appropriate message based on whether the setting was queued or written directly
+
+        Fallback (no handler): original validation + direct write behavior.
         """
         key = self._key_var.get().strip()
         value = self._value_var.get()
@@ -1187,53 +1223,88 @@ class SettingsEditor(ttk.LabelFrame):
             self._show_feedback(result, is_error=True)
             return
 
-        # result is a CorrectionResult — show auto-correction feedback if applicable
-        if result.was_corrected:
-            correction_msg = (
-                f"Auto-corrected: '{result.original_input}' \u2192 '{result.value}'"
-            )
-            self._show_feedback(correction_msg, is_error=False, is_info=True)
+        # If no settings_write_handler, fall back to original behavior
+        if self._settings_write_handler is None:
+            # Show auto-correction feedback if applicable
+            if result.was_corrected:
+                correction_msg = (
+                    f"Auto-corrected: '{result.original_input}' \u2192 '{result.value}'"
+                )
+                self._show_feedback(correction_msg, is_error=False, is_info=True)
 
-        # Write the setting to file
-        try:
-            write_result = SettingsParser.write_setting(
-                self._config.settings_file_path, key, result.value
-            )
-        except Exception as e:
-            self._show_feedback(
-                f"Error: File system error: {e}", is_error=True
-            )
+            # Write the setting to file directly
+            try:
+                write_result = SettingsParser.write_setting(
+                    self._config.settings_file_path, key, result.value
+                )
+            except Exception as e:
+                self._show_feedback(
+                    f"Error: File system error: {e}", is_error=True
+                )
+                return
+
+            if not write_result.valid:
+                error_msg = write_result.error_message or "Unknown write error."
+                self._show_feedback(f"Error: {error_msg}", is_error=True)
+                return
+
+            confirmation = f"Setting '{key}' set to '{result.value}' successfully."
+
+            try:
+                status = self._wrapper_core.get_status()
+                if status.server_state == ServerState.RUNNING:
+                    confirmation += (
+                        " Warning: Server is running. A restart is required "
+                        "for this change to take effect."
+                    )
+            except Exception:
+                pass
+
+            if result.was_corrected:
+                correction_msg = (
+                    f"Auto-corrected: '{result.original_input}' \u2192 '{result.value}'. "
+                )
+                self._show_feedback(correction_msg + confirmation, is_error=False, is_info=True)
+            else:
+                self._show_feedback(confirmation, is_error=False)
+
+            try:
+                self._on_setting_changed()
+            except Exception as e:
+                logger.error("Error in on_setting_changed callback: %s", e)
             return
 
-        # Check write result
-        if not write_result.valid:
-            error_msg = write_result.error_message or "Unknown write error."
+        # Use SettingsWriteHandler for routing
+        validation_result, was_queued = self._settings_write_handler.submit(key, result.value)
+
+        if not validation_result.valid:
+            error_msg = validation_result.error_message or "Unknown error."
             self._show_feedback(f"Error: {error_msg}", is_error=True)
             return
 
-        # Success: show confirmation message
-        confirmation = f"Setting '{key}' set to '{result.value}' successfully."
-
-        # Check if server is RUNNING and append restart warning
-        try:
-            status = self._wrapper_core.get_status()
-            if status.server_state == ServerState.RUNNING:
-                confirmation += (
-                    " Warning: Server is running. A restart is required "
-                    "for this change to take effect."
+        if was_queued:
+            # Setting was queued (server is in unsafe state)
+            msg = f"Setting '{key}' queued as '{result.value}'. Will apply on server stop/restart."
+            if result.was_corrected:
+                correction_msg = (
+                    f"Auto-corrected: '{result.original_input}' \u2192 '{result.value}'. "
                 )
-        except Exception:
-            # If we can't get status, just skip the warning
-            pass
-
-        # Show the final feedback (may include auto-correction info + confirmation)
-        if result.was_corrected:
-            correction_msg = (
-                f"Auto-corrected: '{result.original_input}' \u2192 '{result.value}'. "
-            )
-            self._show_feedback(correction_msg + confirmation, is_error=False, is_info=True)
+                self._show_feedback(correction_msg + msg, is_error=False, is_info=True)
+            else:
+                self._show_feedback(msg, is_error=False, is_info=True)
         else:
-            self._show_feedback(confirmation, is_error=False)
+            # Setting was written directly (server is in safe state)
+            confirmation = f"Setting '{key}' set to '{result.value}' successfully."
+            if result.was_corrected:
+                correction_msg = (
+                    f"Auto-corrected: '{result.original_input}' \u2192 '{result.value}'. "
+                )
+                self._show_feedback(correction_msg + confirmation, is_error=False, is_info=True)
+            else:
+                self._show_feedback(confirmation, is_error=False)
+
+        # Update pending indicator
+        self.update_pending_indicator()
 
         # Trigger SettingsView refresh via the callback
         try:
@@ -1257,3 +1328,72 @@ class SettingsEditor(ttk.LabelFrame):
             self._feedback_label.configure(text=message, foreground="blue")
         else:
             self._feedback_label.configure(text=message, foreground="green")
+
+    def update_pending_indicator(self) -> None:
+        """Update the pending indicator label based on queue state and server state.
+
+        Shows "N change(s) pending" when the pending queue is non-empty and
+        the server is in an unsafe state. Hides the indicator otherwise.
+        Also binds tooltip events for viewing pending entries.
+        """
+        if self._settings_write_handler is None:
+            return
+
+        try:
+            pending_queue = self._settings_write_handler._pending_queue
+            state = self._wrapper_core.get_status().server_state
+            count = pending_queue.count()
+
+            if count > 0 and state not in SettingsWriteHandler.SAFE_STATES:
+                text = f"{count} change(s) pending"
+                self._pending_indicator.configure(text=text)
+                self._pending_indicator.pack(fill="x", padx=5, pady=(0, 5))
+                # Bind tooltip events
+                self._pending_indicator.bind("<Enter>", self._show_pending_tooltip)
+                self._pending_indicator.bind("<Leave>", self._hide_pending_tooltip)
+            else:
+                self._pending_indicator.pack_forget()
+                self._pending_indicator.configure(text="")
+        except Exception as e:
+            logger.error("Error updating pending indicator: %s", e)
+
+    def _show_pending_tooltip(self, event: "tk.Event") -> None:
+        """Show tooltip with pending entries when hovering over the indicator."""
+        if self._settings_write_handler is None:
+            return
+
+        try:
+            pending_queue = self._settings_write_handler._pending_queue
+            entries = pending_queue.entries()
+            if not entries:
+                return
+
+            # Create tooltip window
+            self._tooltip = tk.Toplevel(self)
+            self._tooltip.wm_overrideredirect(True)
+            self._tooltip.wm_geometry(f"+{event.x_root + 10}+{event.y_root + 10}")
+
+            # Build tooltip content
+            lines = [f"{key} = {value}" for key, value in entries]
+            tooltip_text = "\n".join(lines)
+
+            label = ttk.Label(
+                self._tooltip,
+                text=tooltip_text,
+                background="#ffffe0",
+                relief="solid",
+                borderwidth=1,
+                padding=5,
+            )
+            label.pack()
+        except Exception:
+            pass
+
+    def _hide_pending_tooltip(self, event: "tk.Event") -> None:
+        """Hide the pending entries tooltip."""
+        if hasattr(self, "_tooltip") and self._tooltip is not None:
+            try:
+                self._tooltip.destroy()
+            except Exception:
+                pass
+            self._tooltip = None

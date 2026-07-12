@@ -1,0 +1,159 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Create `src/pending_settings.py` with PendingSettingsQueue class and ApplyResult dataclass": [
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783884865657
+      },
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783884871058
+      },
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783884974275
+      }
+    ],
+    "2.1 Create `src/settings_write_handler.py` with SettingsWriteHandler class": [
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783884865663
+      },
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783884980008
+      },
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783885089288
+      }
+    ],
+    "3. Checkpoint - Ensure core modules pass all tests": [
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783884865665
+      },
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783885103906
+      },
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783885190551
+      }
+    ],
+    "4.1 Modify `src/wrapper_core.py` to own PendingSettingsQueue and apply pending on stop/restart": [
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783884865667
+      },
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783885199354
+      },
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783885313162
+      }
+    ],
+    "5.1 Modify `src/management_interface.py` to route set command through SettingsWriteHandler and add pending commands": [
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783884865670
+      },
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783885317929
+      },
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783885472138
+      }
+    ],
+    "6.1 Modify `src/gui_interface.py` to route SettingsEditor submit through SettingsWriteHandler and add pending indicator": [
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783884865672
+      },
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783885319049
+      },
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783885762550
+      }
+    ],
+    "7. Final checkpoint - Ensure all tests pass": [
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783884865674
+      },
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783885765970
+      },
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783885840429
+      }
+    ],
+    "1. Create PendingSettingsQueue module": [
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783884974279
+      }
+    ],
+    "2. Create SettingsWriteHandler module": [
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783885089299
+      }
+    ],
+    "4. Integrate into WrapperCore lifecycle": [
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783885313168
+      }
+    ],
+    "5. Update ManagementInterface (CLI)": [
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783885472144
+      }
+    ],
+    "6. Update GuiInterface (GUI)": [
+      {
+        "executionId": "704b9fea-e378-4732-9671-2a7e27de4fbe",
+        "chatSessionId": "1f20939d-ef86-41fa-9ec3-48ff366fcbf8",
+        "timestamp": 1783885762558
+      }
+    ]
+  }
+}

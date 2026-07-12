@@ -60,6 +60,7 @@ def settings_editor(tmp_config, mock_wrapper_core):
         editor._config = tmp_config
         editor._wrapper_core = mock_wrapper_core
         editor._on_setting_changed = MagicMock()
+        editor._settings_write_handler = None
         editor._key_var = MagicMock()
         editor._value_var = MagicMock()
         editor._feedback_label = MagicMock()
