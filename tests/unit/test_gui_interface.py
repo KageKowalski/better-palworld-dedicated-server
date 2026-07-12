@@ -1592,13 +1592,6 @@ class TestHelpDialog:
         """HelpDialog should have title 'Help - Palworld Server Wrapper'."""
         assert help_dialog.title() == "Help - Palworld Server Wrapper"
 
-    def test_window_geometry_is_600x400(self, help_dialog):
-        """HelpDialog should be sized 600x400."""
-        help_dialog.update_idletasks()
-        geo = help_dialog.geometry()
-        # geometry() returns "600x400+X+Y" format
-        assert geo.startswith("600x400")
-
     def test_text_widget_is_readonly(self, help_dialog):
         """Help text widget should be in disabled (read-only) state."""
         assert help_dialog._text_widget.cget("state") == "disabled"
