@@ -1,0 +1,420 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Create `src/validation.py` with extracted validation functions": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257232
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872263493
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872418031
+      }
+    ],
+    "1.2 Refactor `src/management_interface.py` to use `src/validation.py`": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257235
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872423310
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872545520
+      }
+    ],
+    "2.1 Create `src/gui_interface.py` with `GuiInterface` class skeleton and async loop": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257238
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872566536
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872816334
+      }
+    ],
+    "2.2 Implement `ControlPanel` widget class": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257242
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872820525
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873091267
+      }
+    ],
+    "2.4 Implement `NotificationBar` widget class": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257245
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872567289
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872817012
+      }
+    ],
+    "2.5 Implement `_execute_server_operation()` async method": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257255
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872821277
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873092060
+      }
+    ],
+    "3. Checkpoint - Verify core framework": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257258
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873226639
+      }
+    ],
+    "4.1 Implement `StatusDisplay` widget class": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257261
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872822024
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873092750
+      }
+    ],
+    "4.2 Implement periodic status refresh scheduling": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257264
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873102784
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873214270
+      }
+    ],
+    "4.5 Implement `SettingsView` widget class": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257267
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872822771
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873093492
+      }
+    ],
+    "5. Checkpoint - Verify status and settings display": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257270
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873227506
+      }
+    ],
+    "6.1 Implement `SettingsEditor` widget class": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257272
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873228292
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873543100
+      }
+    ],
+    "6.2 Implement `HelpDialog` class": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257275
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873229051
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873543794
+      }
+    ],
+    "6.3 Implement shutdown controls (Quit button and window close)": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257277
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873229785
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873544539
+      }
+    ],
+    "7.1 Add `--interface` argument and interface selector logic": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257280
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873547607
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873701482
+      }
+    ],
+    "8.1 Wire all GUI components together in `GuiInterface._build_ui()`": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257282
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873707712
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783874054443
+      }
+    ],
+    "9. Final checkpoint - Ensure all tests pass": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257288
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783874062197
+      }
+    ],
+    "10.1 Update `README.md` to document the new GUI interface": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257291
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783874069357
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783874271850
+      }
+    ],
+    "10.2 Update `.kiro/steering/` files if applicable": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872257293
+      },
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783874070112
+      }
+    ],
+    "1. Extract shared validation logic into `src/validation.py`": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872545523
+      }
+    ],
+    "1.3 Write property test for validation round-trip parity": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783872563213
+      }
+    ],
+    "2. Implement core GUI framework and control panel": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873092063
+      }
+    ],
+    "2.3 Write property test for button state consistency": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873099220
+      }
+    ],
+    "4. Implement status display and settings view": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873214277
+      }
+    ],
+    "4.3 Write property test for status display field presence": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873220385
+      }
+    ],
+    "4.4 Write property test for idle timer display format": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873221103
+      }
+    ],
+    "4.6 Write property test for password masking": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873221989
+      }
+    ],
+    "4.7 Write property test for settings alphabetical ordering": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873222744
+      }
+    ],
+    "6. Implement settings editor and help dialog": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873544544
+      }
+    ],
+    "7. Modify `src/main.py` for interface selection": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873701486
+      }
+    ],
+    "7.2 Write property test for interface selector argument normalization": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783873704878
+      }
+    ],
+    "8. Integration wiring and final assembly": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783874054446
+      }
+    ],
+    "8.2 Write unit tests for GUI initialization and shutdown": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783874057826
+      }
+    ],
+    "8.3 Write integration tests for async loop cooperation": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783874058683
+      }
+    ],
+    "10. Update project documentation": [
+      {
+        "executionId": "efa95477-591a-48df-abae-5c5270c98ff8",
+        "chatSessionId": "4001b589-b6de-4523-bc2f-defff9d6510b",
+        "timestamp": 1783874271853
+      }
+    ]
+  }
+}

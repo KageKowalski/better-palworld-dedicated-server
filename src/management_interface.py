@@ -18,27 +18,20 @@ Commands:
 
 import asyncio
 import logging
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from src.config import WrapperConfig
 from src.models import ServerState, WrapperStatus
 from src.settings_parser import SETTING_DEFINITIONS, SettingsParser
+from src.validation import (
+    CorrectionResult,
+    PASSWORD_MASK,
+    is_password_setting,
+    validate_and_correct,
+)
 from src.wrapper_core import WrapperCore
 
 logger = logging.getLogger(__name__)
-
-PASSWORD_MASK = "********"
-
-
-@dataclass
-class CorrectionResult:
-    """Result of input auto-correction for the set command."""
-
-    value: Any  # The corrected value to write
-    was_corrected: bool  # Whether auto-correction was applied
-    original_input: str  # The user's original input string
 
 
 class ManagementInterface:
@@ -246,7 +239,7 @@ class ManagementInterface:
         Returns:
             True when key contains the substring "Password" (case-sensitive).
         """
-        return "Password" in key
+        return is_password_setting(key)
 
     async def _cmd_settings(self) -> None:
         """Handle the 'settings' command."""
@@ -282,22 +275,13 @@ class ManagementInterface:
         key = parts[1]
         value = parts[2]
 
-        # Look up setting definition for type-aware validation
-        definition = SETTING_DEFINITIONS.get(key)
-
-        if definition is None:
-            # Unknown setting: write as-is without validation
-            correction = CorrectionResult(
-                value=value, was_corrected=False, original_input=value
-            )
-        else:
-            # Validate and auto-correct based on value_type
-            result = self._validate_and_correct(key, value, definition)
-            if isinstance(result, str):
-                # Validation failed — result is the error message
-                await self.display_message(result)
-                return
-            correction = result
+        # Validate and auto-correct using the shared validation module
+        result = validate_and_correct(key, value)
+        if isinstance(result, str):
+            # Validation failed — result is the error message
+            await self.display_message(result)
+            return
+        correction = result
 
         # Write the corrected value
         write_result = self._settings_parser.write_setting(
@@ -329,40 +313,29 @@ class ManagementInterface:
 
     def _validate_and_correct(
         self, key: str, value: str, definition: Any
-    ) -> CorrectionResult | str:
+    ) -> "CorrectionResult | str":
         """Validate and auto-correct a value based on its setting definition.
+
+        Delegates to the shared validation module. This method is retained
+        for backward compatibility with existing tests.
 
         Args:
             key: The setting key name.
             value: The user-provided value string.
-            definition: The SettingDefinition for this setting.
+            definition: The SettingDefinition for this setting (unused, kept for API compat).
 
         Returns:
             CorrectionResult with the corrected value on success, or an error
             message string on validation failure.
         """
-        if definition.value_type == str:
-            if definition.allowed_values is not None:
-                # Enum validation: check against allowed_values list
-                return self._validate_enum(key, value, definition)
-            else:
-                # String auto-correction: handle quoting
-                return self._correct_string(value)
-        elif definition.value_type == bool:
-            return self._correct_boolean(key, value)
-        elif definition.value_type == int:
-            return self._validate_integer(key, value, definition)
-        elif definition.value_type == float:
-            return self._validate_float(key, value, definition)
+        from src.validation import _validate_and_correct as _val_correct
 
-        # Fallback: pass as-is
-        return CorrectionResult(value=value, was_corrected=False, original_input=value)
+        return _val_correct(key, value, definition)
 
     def _correct_string(self, value: str) -> CorrectionResult:
         """Auto-correct string values by handling quoting.
 
-        - If already quoted with "...", strip outer quotes and pass inner content.
-        - If not quoted, pass as-is (SettingsParser._format_value adds quotes on write).
+        Delegates to the shared validation module.
 
         Args:
             value: The user-provided value string.
@@ -370,20 +343,14 @@ class ManagementInterface:
         Returns:
             CorrectionResult with the corrected string value.
         """
-        if value.startswith('"') and value.endswith('"') and len(value) >= 2:
-            # Already quoted: strip outer quotes, pass inner content
-            inner = value[1:-1]
-            return CorrectionResult(
-                value=inner, was_corrected=True, original_input=value
-            )
-        else:
-            # Not quoted: pass as-is (write_setting will add quotes via _format_value)
-            return CorrectionResult(
-                value=value, was_corrected=False, original_input=value
-            )
+        from src.validation import _correct_string
 
-    def _correct_boolean(self, key: str, value: str) -> CorrectionResult | str:
+        return _correct_string(value)
+
+    def _correct_boolean(self, key: str, value: str) -> "CorrectionResult | str":
         """Normalize boolean values to canonical True/False form.
+
+        Delegates to the shared validation module.
 
         Args:
             key: The setting key name (for error messages).
@@ -392,118 +359,9 @@ class ManagementInterface:
         Returns:
             CorrectionResult with normalized boolean, or error message string.
         """
-        lower = value.lower()
-        if lower == "true":
-            normalized = "True"
-        elif lower == "false":
-            normalized = "False"
-        else:
-            return (
-                f"Error: Setting '{key}' must be a boolean (True/False), "
-                f"got: '{value}'"
-            )
+        from src.validation import _correct_boolean
 
-        was_corrected = value != normalized
-        return CorrectionResult(
-            value=normalized, was_corrected=was_corrected, original_input=value
-        )
-
-    def _validate_integer(
-        self, key: str, value: str, definition: Any
-    ) -> CorrectionResult | str:
-        """Validate and parse an integer value, checking range constraints.
-
-        Args:
-            key: The setting key name (for error messages).
-            value: The user-provided value string.
-            definition: The SettingDefinition with min/max constraints.
-
-        Returns:
-            CorrectionResult with the parsed int, or error message string.
-        """
-        try:
-            int_value = int(value)
-        except ValueError:
-            return (
-                f"Error: Setting '{key}' must be an integer, got: '{value}'"
-            )
-
-        # Range validation
-        if definition.min_value is not None and int_value < definition.min_value:
-            return (
-                f"Error: Setting '{key}' value {int_value} is out of range. "
-                f"Allowed range: {definition.min_value} to {definition.max_value}."
-            )
-        if definition.max_value is not None and int_value > definition.max_value:
-            return (
-                f"Error: Setting '{key}' value {int_value} is out of range. "
-                f"Allowed range: {definition.min_value} to {definition.max_value}."
-            )
-
-        return CorrectionResult(
-            value=int_value, was_corrected=False, original_input=value
-        )
-
-    def _validate_float(
-        self, key: str, value: str, definition: Any
-    ) -> CorrectionResult | str:
-        """Validate and parse a float value, checking range constraints.
-
-        Args:
-            key: The setting key name (for error messages).
-            value: The user-provided value string.
-            definition: The SettingDefinition with min/max constraints.
-
-        Returns:
-            CorrectionResult with the parsed float, or error message string.
-        """
-        try:
-            float_value = float(value)
-        except ValueError:
-            return (
-                f"Error: Setting '{key}' must be a float, got: '{value}'"
-            )
-
-        # Range validation
-        if definition.min_value is not None and float_value < definition.min_value:
-            return (
-                f"Error: Setting '{key}' value {float_value} is out of range. "
-                f"Allowed range: {definition.min_value} to {definition.max_value}."
-            )
-        if definition.max_value is not None and float_value > definition.max_value:
-            return (
-                f"Error: Setting '{key}' value {float_value} is out of range. "
-                f"Allowed range: {definition.min_value} to {definition.max_value}."
-            )
-
-        was_corrected = value != f"{float_value:.6f}"
-        return CorrectionResult(
-            value=float_value, was_corrected=was_corrected, original_input=value
-        )
-
-    def _validate_enum(
-        self, key: str, value: str, definition: Any
-    ) -> CorrectionResult | str:
-        """Validate a value against an enum-type setting's allowed values.
-
-        Args:
-            key: The setting key name (for error messages).
-            value: The user-provided value string.
-            definition: The SettingDefinition with allowed_values list.
-
-        Returns:
-            CorrectionResult with the value as-is, or error message string.
-        """
-        if value not in definition.allowed_values:
-            allowed = ", ".join(definition.allowed_values)
-            return (
-                f"Error: Setting '{key}' value '{value}' is not valid. "
-                f"Allowed values: {allowed}"
-            )
-
-        return CorrectionResult(
-            value=value, was_corrected=False, original_input=value
-        )
+        return _correct_boolean(key, value)
 
     async def _cmd_help(self) -> None:
         """Handle the 'help' command."""

@@ -36,6 +36,13 @@ python -m pytest tests/property/ -v # Property tests only
 - For bugfixes: write exploration tests (expected to fail on unfixed code) and preservation tests (must pass before and after fix) — see `tests/property/test_bug_conditions.py` and `tests/property/test_preservation.py` for examples
 - Use `deadline=None` in hypothesis settings for async tests that involve mocked `asyncio.sleep` or network I/O
 
+## GUI Testing
+
+- **Mock-based approach (preferred for unit tests):** Patch `tk.Tk` and related tkinter objects to test GUI logic without a display. See `tests/unit/test_gui_interface.py` and `tests/unit/test_control_panel.py` for examples.
+- **Display-dependent tests:** Tests requiring a live display use `pytest.importorskip("tkinter")` and skip gracefully when `$DISPLAY` is unavailable. In CI, these run under `xvfb-run`.
+- **Widget state assertions:** Use `.cget("state")` or `.instate(["disabled"])` to verify button enable/disable logic.
+- **Async GUI tests:** Mock `root.update()` and test the async `run()` method's cooperative scheduling behavior with controlled iterations.
+
 ## What to Test
 
 - All public methods of each component

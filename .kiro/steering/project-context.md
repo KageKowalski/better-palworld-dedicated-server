@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A Python wrapper that sits around the Palworld Dedicated Server (`PalServer.exe`) on Windows. It monitors for player connections, auto-starts the server when someone tries to join, and auto-stops it when idle — conserving system resources.
+A Python wrapper that sits around the Palworld Dedicated Server (`PalServer.exe`) on Windows. It monitors for player connections, auto-starts the server when someone tries to join, and auto-stops it when idle — conserving system resources. It provides a dual-interface architecture: a tkinter-based GUI (default) and a console/CLI interface (secondary fallback).
 
 ## Architecture Overview
 
@@ -11,6 +11,8 @@ The wrapper is a **state machine** with four states:
 - **STARTING** — Server launching, waiting for RCON TCP port 25575 readiness (120s timeout)
 - **RUNNING** — Server active, RCON polling for player count (initial connection retries with backoff), idle timer tracking
 - **STOPPING** — Graceful shutdown in progress (30s timeout before force kill)
+
+**Interface mode** is selectable via `--interface gui|console` (default: `gui`). The GUI uses tkinter with cooperative async scheduling; the console interface reads from stdin. Both interfaces call the same WrapperCore API.
 
 ## Component Map
 
@@ -22,11 +24,13 @@ The wrapper is a **state machine** with four states:
 | `src/rcon_client.py` | RCON queries for player count |
 | `src/idle_timer.py` | Countdown timer that triggers shutdown |
 | `src/settings_parser.py` | PalWorldSettings.ini read/write/validate (handles string quoting on write/read) |
-| `src/management_interface.py` | Interactive CLI (stdin commands), input validation/auto-correction, password masking, `CorrectionResult` dataclass |
+| `src/gui_interface.py` | Tkinter-based GUI management interface — cooperative async scheduling with `root.update()` every ~33ms, widgets as `ttk.LabelFrame` subclasses |
+| `src/management_interface.py` | Interactive CLI (stdin commands), password masking; delegates validation to `src/validation.py` |
+| `src/validation.py` | Shared input validation and auto-correction logic (`validate_and_correct()`, `CorrectionResult` dataclass, `is_password_setting()`) — used by both GUI and console interfaces |
 | `src/logger.py` | Rotating file logger |
 | `src/config.py` | Configuration dataclass |
 | `src/models.py` | Shared enums, result types, status types |
-| `src/main.py` | Entry point, argparse, wiring |
+| `src/main.py` | Entry point, argparse (including `--interface gui\|console`), wiring |
 | `src/__main__.py` | Enables `python -m src` invocation |
 
 ## Key Design Decisions
@@ -37,8 +41,11 @@ The wrapper is a **state machine** with four states:
 4. **UDP bind-and-release** — The wrapper binds the game port to detect connections, then releases it so the server can bind
 5. **RCON port for readiness detection** — Server readiness is checked by TCP-connecting to the RCON port (25575), not the game UDP port (8211), since TCP probes work reliably and RCON availability means the server is fully initialized
 6. **Retry with backoff** — UDP port binding and RCON initial connection both use retry loops with exponential backoff to handle transient failures (OS socket cleanup delays, slow server initialization)
-7. **Validation at the presentation layer** — Input validation and auto-correction lives in ManagementInterface (user-facing), while SettingsParser handles raw file I/O formatting
-8. **Password masking at display time** — Password values are stored unmasked in the file but displayed as `********` in the `settings` command output
+7. **Validation at the presentation layer** — Input validation and auto-correction lives in the shared `src/validation.py` module (used by both GUI and console), while SettingsParser handles raw file I/O formatting
+8. **Password masking at display time** — Password values are stored unmasked in the file but displayed as `********` in both GUI settings view and console `settings` command output
+9. **Tkinter cooperative async scheduling** — The GUI integrates with asyncio by calling `root.update()` every ~33ms from an asyncio coroutine instead of running tkinter's blocking `mainloop()`, ensuring WrapperCore background tasks are never starved
+10. **Shared validation module** — Validation logic extracted to `src/validation.py` so both GUI and console interfaces produce identical validation/auto-correction behavior without code duplication
+11. **Dual-interface architecture** — GUI is the default interface; console is the secondary fallback. Both share the same WrapperCore API and validation logic, differing only in presentation
 
 ## External Dependencies
 
