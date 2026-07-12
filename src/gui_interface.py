@@ -92,10 +92,11 @@ class GuiInterface:
         Layout order (top to bottom):
         1. ControlPanel - Server control buttons (Start/Stop/Restart)
         2. StatusDisplay - Real-time server status fields
-        3. SettingsView - Read-only settings display (expandable)
-        4. SettingsEditor - Setting modification form
-        5. Button frame - Help and Quit buttons
-        6. NotificationBar - Success/error notification display (bottom)
+        3. OutputPanel - Operational log output
+        4. SettingsView - Read-only settings display (expandable)
+        5. SettingsEditor - Setting modification form
+        6. Button frame - Help and Quit buttons
+        7. NotificationBar - Success/error notification display (bottom)
 
         All widget instances are stored as self._ attributes so
         _disable_all_controls() and other methods can access them.
@@ -122,11 +123,15 @@ class GuiInterface:
         )
         self._status_display.pack(fill="x", padx=10, pady=5)
 
-        # 3. Settings View - Read-only settings list (gets expand=True for extra space)
+        # 3. Output Panel - Operational log output
+        self._output_panel = OutputPanel(self._root)
+        self._output_panel.pack(fill="both", expand=True, padx=10, pady=5)
+
+        # 4. Settings View - Read-only settings list (gets expand=True for extra space)
         self._settings_view = SettingsView(self._root, config=self._config)
         self._settings_view.pack(fill="both", expand=True, padx=10, pady=5)
 
-        # 4. Settings Editor - Modify setting form
+        # 5. Settings Editor - Modify setting form
         self._settings_editor = SettingsEditor(
             self._root,
             config=self._config,
@@ -135,7 +140,7 @@ class GuiInterface:
         )
         self._settings_editor.pack(fill="x", padx=10, pady=5)
 
-        # 5. Button frame - Help and Quit buttons
+        # 6. Button frame - Help and Quit buttons
         button_frame = ttk.Frame(self._root)
         button_frame.pack(fill="x", padx=10, pady=5)
 
@@ -153,7 +158,7 @@ class GuiInterface:
         )
         self._quit_button.pack(side="right")
 
-        # 6. Notification Bar - Success/error messages (handles its own visibility)
+        # 7. Notification Bar - Success/error messages (handles its own visibility)
         self._notification_bar = NotificationBar(self._root)
 
     def _schedule_status_refresh(self) -> None:
@@ -164,6 +169,17 @@ class GuiInterface:
         that status refreshes between 500ms and 2 seconds.
         """
         self._root.after(1000, self._refresh_status)
+
+    def get_log_callback(self) -> Callable[[str], None]:
+        """Return the callback function for routing log messages to the GUI.
+
+        This provides the OutputPanel's append_message method for use as
+        the gui_callback in WrapperLogger.add_gui_handler().
+
+        Returns:
+            The OutputPanel.append_message method.
+        """
+        return self._output_panel.append_message
 
     def _refresh_status(self) -> None:
         """Refresh the status display and control panel button states.
@@ -502,6 +518,72 @@ class ControlPanel(ttk.LabelFrame):
     def _hide_loading(self) -> None:
         """Hide the loading indicator label."""
         self._loading_label.pack_forget()
+
+
+class OutputPanel(ttk.LabelFrame):
+    """Scrollable text area displaying operational log output.
+
+    Provides a read-only text widget that receives log messages via
+    append_message(). Auto-scrolls to the latest entry. Maintains
+    a maximum of 1000 lines to prevent unbounded memory growth.
+
+    Thread-safe: append_message() schedules the actual insert via
+    root.after() so it can be called from any thread (e.g., logging handler).
+    """
+
+    MAX_LINES = 1000
+
+    def __init__(self, parent: tk.Widget) -> None:
+        """Initialize the OutputPanel.
+
+        Args:
+            parent: The parent tkinter widget.
+        """
+        super().__init__(parent, text="Output")
+
+        # Scrollbar on the right side
+        self._scrollbar = ttk.Scrollbar(self)
+        self._scrollbar.pack(side="right", fill="y")
+
+        # Read-only Text widget
+        self._text_widget = tk.Text(
+            self,
+            wrap="word",
+            state="disabled",
+            yscrollcommand=self._scrollbar.set,
+        )
+        self._text_widget.pack(side="left", fill="both", expand=True)
+        self._scrollbar.configure(command=self._text_widget.yview)
+
+    def append_message(self, message: str) -> None:
+        """Append a log message to the output panel.
+
+        Thread-safe via root.after() scheduling. Trims oldest lines
+        if MAX_LINES is exceeded. Auto-scrolls to bottom.
+
+        Args:
+            message: The formatted log message string.
+        """
+        def _do_append() -> None:
+            self._text_widget.configure(state="normal")
+            self._text_widget.insert("end", message + "\n")
+
+            # Trim lines exceeding MAX_LINES
+            line_count = int(self._text_widget.index("end-1c").split(".")[0])
+            if line_count > self.MAX_LINES:
+                excess = line_count - self.MAX_LINES
+                self._text_widget.delete("1.0", f"{excess + 1}.0")
+
+            self._text_widget.configure(state="disabled")
+            self._text_widget.see("end")
+
+        self.winfo_toplevel().after(0, _do_append)
+
+    def clear(self) -> None:
+        """Clear all content from the output panel."""
+        self._text_widget.configure(state="normal")
+        self._text_widget.delete("1.0", "end")
+        self._text_widget.configure(state="disabled")
 
 
 class NotificationBar(ttk.Frame):

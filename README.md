@@ -12,7 +12,7 @@ A lightweight wrapper that manages your Palworld Dedicated Server process on Win
 - **Dual interface modes** — Choose between a GUI (default) or console interface via `--interface gui|console`.
 - **Settings editor** — View and modify `PalWorldSettings.ini` values with type/range validation, without editing the file by hand (available in both GUI and console modes).
 - **Crash recovery** — If the server process dies unexpectedly, the wrapper resumes monitoring for new connections.
-- **Logging** — Rotating log file with timestamped entries for state changes, player events, and errors.
+- **Logging** — Rotating log file with timestamped entries for state changes, player events, and errors. Operational output is additionally shown in the active interface (console stdout or the GUI output panel).
 
 ## Requirements
 
@@ -72,6 +72,7 @@ By default, the wrapper launches a graphical management window (title: "Palworld
 |---------|-------------|
 | **Server Control** | Start, Stop, and Restart buttons. Buttons are enabled/disabled based on the current server state. A loading indicator appears during operations. |
 | **Status Display** | Real-time display of server state, player count, idle timer, server PID, and uptime. Refreshes automatically every 1 second. |
+| **Output Panel** | Scrollable area displaying operational output (state changes, player events, errors) in real time. Replaces the need for a separate console window. |
 | **Settings View** | All server settings shown alphabetically. Password values are masked. Includes a Refresh button. |
 | **Settings Editor** | Modify any setting by entering a key and value. Type-aware validation and auto-correction feedback is shown before writing. |
 | **Help** | Opens a dialog describing all GUI controls and fields. |
@@ -82,6 +83,17 @@ To use the console interface instead:
 ```bash
 palworld-wrapper --interface console --server-exe <path> --settings-file <path> --rcon-password <password>
 ```
+
+### Standalone GUI Behavior
+
+When launched in GUI mode (the default), the wrapper automatically detaches from the PowerShell console that started it. This means:
+
+- **The launching console can be closed.** The GUI window continues running independently — closing PowerShell will not terminate the server or the wrapper.
+- **No console window needs to remain open.** The GUI operates as a standalone application.
+- **All operational output appears in the Output panel** within the GUI window itself (state changes, player events, errors). You do not need a console to monitor the wrapper.
+- **Logs are always written to file.** Regardless of interface mode, all output is logged to the configured log file (`wrapper.log` by default) for debugging.
+
+> **Note:** Console mode (`--interface console`) still requires the console to remain open, as expected — it reads commands from and prints output to the terminal.
 
 ## Console Interface (Interactive Commands)
 

@@ -16,7 +16,9 @@ import sys
 import tkinter as tk
 from pathlib import Path
 
+from src import launcher
 from src.config import WrapperConfig
+from src.logger import WrapperLogger
 from src.management_interface import ManagementInterface
 from src.wrapper_core import WrapperCore
 
@@ -108,6 +110,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=["gui", "console"],
         help="Interface mode: gui (default) or console",
     )
+    parser.add_argument(
+        "--detached",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
+    )
 
     return parser.parse_args(argv)
 
@@ -138,7 +146,9 @@ def build_config(args: argparse.Namespace) -> WrapperConfig:
     return config
 
 
-async def run_wrapper(config: WrapperConfig, interface_mode: str = "gui") -> None:
+async def run_wrapper(
+    config: WrapperConfig, interface_mode: str = "gui", is_detached: bool = False
+) -> None:
     """Run the wrapper core and management interface concurrently.
 
     Sets up a global exception handler on the asyncio event loop so that
@@ -148,10 +158,18 @@ async def run_wrapper(config: WrapperConfig, interface_mode: str = "gui") -> Non
     - "gui": imports and instantiates GuiInterface (exits with code 1 on TclError)
     - "console": uses existing ManagementInterface
 
+    When is_detached is True, installs a CTRL_CLOSE_EVENT handler to prevent
+    the OS from killing the process if any residual console association exists.
+
     Args:
         config: Validated wrapper configuration.
         interface_mode: Interface to use, either "gui" or "console".
+        is_detached: Whether the process is running in detached mode.
     """
+    # If running as a detached GUI process, ignore CTRL_CLOSE_EVENT (Req 5.4)
+    if is_detached:
+        launcher.install_ctrl_close_handler()
+
     loop = asyncio.get_running_loop()
 
     # Install a global exception handler for unhandled async exceptions (Req 8.5)
@@ -184,6 +202,39 @@ async def run_wrapper(config: WrapperConfig, interface_mode: str = "gui") -> Non
             sys.exit(1)
     else:
         interface = ManagementInterface(wrapper_core, config)
+
+    # Configure logging based on interface mode (Req 4.1-4.6)
+    wrapper_logger = WrapperLogger()
+    if interface_mode == "gui":
+        gui_callback = interface.get_log_callback()
+        try:
+            wrapper_logger.setup(
+                config.log_file_path,
+                max_size_mb=config.log_max_size_mb,
+                backup_count=config.log_backup_count,
+                mode="gui",
+                gui_callback=gui_callback,
+            )
+        except Exception as e:
+            # Report log file error via GUI notification bar (Req 4.5)
+            if hasattr(interface, "_notification_bar") and interface._notification_bar is not None:
+                interface._notification_bar.show_error(
+                    f"Warning: Could not set up log file: {e}"
+                )
+    else:
+        try:
+            wrapper_logger.setup(
+                config.log_file_path,
+                max_size_mb=config.log_max_size_mb,
+                backup_count=config.log_backup_count,
+                mode="console",
+            )
+        except Exception as e:
+            # Report log file error via stderr for console mode (Req 4.5)
+            print(
+                f"Warning: Could not set up log file: {e}",
+                file=sys.stderr,
+            )
 
     # Run both concurrently; if either finishes, cancel the other
     core_task = asyncio.create_task(wrapper_core.run(), name="wrapper_core")
@@ -244,8 +295,13 @@ def main(argv: list[str] | None = None) -> None:
         print(f"Startup error: {e}", file=sys.stderr)
         sys.exit(1)
 
+    # Check if we need to detach and respawn as a GUI process (Req 1.1, 6.1-6.3)
+    if launcher.should_detach(args.interface, args.detached):
+        exit_code = launcher.detach_and_respawn(sys.argv)
+        sys.exit(exit_code)
+
     try:
-        asyncio.run(run_wrapper(config, args.interface))
+        asyncio.run(run_wrapper(config, args.interface, is_detached=args.detached))
     except KeyboardInterrupt:
         logger.info("Received Ctrl+C, shutting down gracefully")
         print("\nShutting down...")

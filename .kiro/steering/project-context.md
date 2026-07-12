@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A Python wrapper that sits around the Palworld Dedicated Server (`PalServer.exe`) on Windows. It monitors for player connections, auto-starts the server when someone tries to join, and auto-stops it when idle — conserving system resources. It provides a dual-interface architecture: a tkinter-based GUI (default) and a console/CLI interface (secondary fallback).
+A Python wrapper that sits around the Palworld Dedicated Server (`PalServer.exe`) on Windows. It monitors for player connections, auto-starts the server when someone tries to join, and auto-stops it when idle — conserving system resources. It provides a dual-interface architecture: a tkinter-based GUI (default) and a console/CLI interface (secondary fallback). In GUI mode, the wrapper automatically detaches from the launching console, allowing the PowerShell window to be closed without affecting the running GUI application.
 
 ## Architecture Overview
 
@@ -14,6 +14,8 @@ The wrapper is a **state machine** with four states:
 
 **Interface mode** is selectable via `--interface gui|console` (default: `gui`). The GUI uses tkinter with cooperative async scheduling; the console interface reads from stdin. Both interfaces call the same WrapperCore API.
 
+**Console detachment (GUI mode):** On Windows, when launched in GUI mode with an attached console, the launcher automatically re-spawns the wrapper as a detached process (using `pythonw.exe` if available, with `CREATE_NO_WINDOW | DETACHED_PROCESS` flags) and the original process exits. A hidden `--detached` flag prevents infinite re-spawn loops. The detached GUI process ignores `CTRL_CLOSE_EVENT` via `signal.SIGBREAK` handling.
+
 ## Component Map
 
 | Module | Responsibility |
@@ -24,13 +26,14 @@ The wrapper is a **state machine** with four states:
 | `src/rcon_client.py` | RCON queries for player count |
 | `src/idle_timer.py` | Countdown timer that triggers shutdown |
 | `src/settings_parser.py` | PalWorldSettings.ini read/write/validate (handles string quoting on write/read) |
-| `src/gui_interface.py` | Tkinter-based GUI management interface — cooperative async scheduling with `root.update()` every ~33ms, widgets as `ttk.LabelFrame` subclasses |
+| `src/gui_interface.py` | Tkinter-based GUI management interface — cooperative async scheduling with `root.update()` every ~33ms, widgets as `ttk.LabelFrame` subclasses, includes OutputPanel for log display |
 | `src/management_interface.py` | Interactive CLI (stdin commands), password masking; delegates validation to `src/validation.py` |
 | `src/validation.py` | Shared input validation and auto-correction logic (`validate_and_correct()`, `CorrectionResult` dataclass, `is_password_setting()`) — used by both GUI and console interfaces |
-| `src/logger.py` | Rotating file logger |
+| `src/launcher.py` | Console detachment for GUI mode — detects attached console, resolves `pythonw.exe`, re-spawns as detached process with `--detached` flag, installs CTRL_CLOSE_EVENT handler |
+| `src/logger.py` | Rotating file logger with mode-aware handler routing (StreamHandler for console, GuiLogHandler callback for GUI) |
 | `src/config.py` | Configuration dataclass |
 | `src/models.py` | Shared enums, result types, status types |
-| `src/main.py` | Entry point, argparse (including `--interface gui\|console`), wiring |
+| `src/main.py` | Entry point, argparse (including `--interface gui\|console` and hidden `--detached`), launcher integration, wiring |
 | `src/__main__.py` | Enables `python -m src` invocation |
 
 ## Key Design Decisions
@@ -46,6 +49,8 @@ The wrapper is a **state machine** with four states:
 9. **Tkinter cooperative async scheduling** — The GUI integrates with asyncio by calling `root.update()` every ~33ms from an asyncio coroutine instead of running tkinter's blocking `mainloop()`, ensuring WrapperCore background tasks are never starved
 10. **Shared validation module** — Validation logic extracted to `src/validation.py` so both GUI and console interfaces produce identical validation/auto-correction behavior without code duplication
 11. **Dual-interface architecture** — GUI is the default interface; console is the secondary fallback. Both share the same WrapperCore API and validation logic, differing only in presentation
+12. **Console detachment via launcher** — In GUI mode on Windows, `src/launcher.py` re-spawns the process as a detached child using `pythonw.exe` (or `python.exe` with `CREATE_NO_WINDOW | DETACHED_PROCESS` flags as fallback), then exits. A hidden `--detached` flag prevents infinite re-spawn loops
+13. **Mode-aware logging** — The logger routes operational output to stdout (console mode) or a GUI OutputPanel callback (GUI mode), while always maintaining file logging. GUI mode never writes to stdout/stderr
 
 ## External Dependencies
 
