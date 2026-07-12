@@ -40,128 +40,316 @@ class SettingDefinition:
 # Common Palworld server setting definitions with their types and ranges
 SETTING_DEFINITIONS: dict[str, SettingDefinition] = {
     "DayTimeSpeedRate": SettingDefinition(
-        name="DayTimeSpeedRate", value_type=float, min_value=0.1, max_value=5.0
+        name="DayTimeSpeedRate",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for the speed of daytime progression.",
+        default_value=1.0,
     ),
     "NightTimeSpeedRate": SettingDefinition(
-        name="NightTimeSpeedRate", value_type=float, min_value=0.1, max_value=5.0
+        name="NightTimeSpeedRate",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for the speed of nighttime progression.",
+        default_value=1.0,
     ),
     "ExpRate": SettingDefinition(
-        name="ExpRate", value_type=float, min_value=0.1, max_value=20.0
+        name="ExpRate",
+        value_type=float,
+        min_value=0.1,
+        max_value=20.0,
+        description="Multiplier for experience points gained.",
+        default_value=1.0,
     ),
     "PalCaptureRate": SettingDefinition(
-        name="PalCaptureRate", value_type=float, min_value=0.5, max_value=2.0
+        name="PalCaptureRate",
+        value_type=float,
+        min_value=0.5,
+        max_value=2.0,
+        description="Multiplier for Pal capture probability.",
+        default_value=1.0,
     ),
     "PalSpawnNumRate": SettingDefinition(
-        name="PalSpawnNumRate", value_type=float, min_value=0.5, max_value=3.0
+        name="PalSpawnNumRate",
+        value_type=float,
+        min_value=0.5,
+        max_value=3.0,
+        description="Multiplier for the number of Pals that spawn.",
+        default_value=1.0,
     ),
     "PalDamageRateAttack": SettingDefinition(
-        name="PalDamageRateAttack", value_type=float, min_value=0.1, max_value=5.0
+        name="PalDamageRateAttack",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for damage dealt by Pals.",
+        default_value=1.0,
     ),
     "PalDamageRateDefense": SettingDefinition(
-        name="PalDamageRateDefense", value_type=float, min_value=0.1, max_value=5.0
+        name="PalDamageRateDefense",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for damage received by Pals.",
+        default_value=1.0,
     ),
     "PlayerDamageRateAttack": SettingDefinition(
-        name="PlayerDamageRateAttack", value_type=float, min_value=0.1, max_value=5.0
+        name="PlayerDamageRateAttack",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for damage dealt by players.",
+        default_value=1.0,
     ),
     "PlayerDamageRateDefense": SettingDefinition(
-        name="PlayerDamageRateDefense", value_type=float, min_value=0.1, max_value=5.0
+        name="PlayerDamageRateDefense",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for damage received by players.",
+        default_value=1.0,
     ),
     "PlayerStomachDecreaceRate": SettingDefinition(
-        name="PlayerStomachDecreaceRate", value_type=float, min_value=0.1, max_value=5.0
+        name="PlayerStomachDecreaceRate",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for player hunger depletion speed.",
+        default_value=1.0,
     ),
     "PlayerStaminaDecreaceRate": SettingDefinition(
-        name="PlayerStaminaDecreaceRate", value_type=float, min_value=0.1, max_value=5.0
+        name="PlayerStaminaDecreaceRate",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for player stamina depletion speed.",
+        default_value=1.0,
     ),
     "PlayerAutoHPRegeneRate": SettingDefinition(
-        name="PlayerAutoHPRegeneRate", value_type=float, min_value=0.1, max_value=5.0
+        name="PlayerAutoHPRegeneRate",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for player auto HP regeneration.",
+        default_value=1.0,
     ),
     "PlayerAutoHpRegeneRateInSleep": SettingDefinition(
-        name="PlayerAutoHpRegeneRateInSleep", value_type=float, min_value=0.1, max_value=5.0
+        name="PlayerAutoHpRegeneRateInSleep",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for player HP regeneration while sleeping.",
+        default_value=1.0,
     ),
     "PalStomachDecreaceRate": SettingDefinition(
-        name="PalStomachDecreaceRate", value_type=float, min_value=0.1, max_value=5.0
+        name="PalStomachDecreaceRate",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for Pal hunger depletion speed.",
+        default_value=1.0,
     ),
     "PalStaminaDecreaceRate": SettingDefinition(
-        name="PalStaminaDecreaceRate", value_type=float, min_value=0.1, max_value=5.0
+        name="PalStaminaDecreaceRate",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for Pal stamina depletion speed.",
+        default_value=1.0,
     ),
     "PalAutoHPRegeneRate": SettingDefinition(
-        name="PalAutoHPRegeneRate", value_type=float, min_value=0.1, max_value=5.0
+        name="PalAutoHPRegeneRate",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for Pal auto HP regeneration.",
+        default_value=1.0,
     ),
     "PalAutoHpRegeneRateInSleep": SettingDefinition(
-        name="PalAutoHpRegeneRateInSleep", value_type=float, min_value=0.1, max_value=5.0
+        name="PalAutoHpRegeneRateInSleep",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for Pal HP regeneration while sleeping.",
+        default_value=1.0,
     ),
     "BuildObjectDamageRate": SettingDefinition(
-        name="BuildObjectDamageRate", value_type=float, min_value=0.1, max_value=5.0
+        name="BuildObjectDamageRate",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for damage dealt to structures.",
+        default_value=1.0,
     ),
     "BuildObjectDeteriorationDamageRate": SettingDefinition(
         name="BuildObjectDeteriorationDamageRate",
         value_type=float,
         min_value=0.0,
         max_value=10.0,
+        description="Multiplier for structure deterioration over time.",
+        default_value=1.0,
     ),
     "CollectionDropRate": SettingDefinition(
-        name="CollectionDropRate", value_type=float, min_value=0.1, max_value=5.0
+        name="CollectionDropRate",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for item drop rate from gathering.",
+        default_value=1.0,
     ),
     "CollectionObjectHpRate": SettingDefinition(
-        name="CollectionObjectHpRate", value_type=float, min_value=0.1, max_value=5.0
+        name="CollectionObjectHpRate",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for gatherable object HP.",
+        default_value=1.0,
     ),
     "CollectionObjectRespawnSpeedRate": SettingDefinition(
         name="CollectionObjectRespawnSpeedRate",
         value_type=float,
         min_value=0.1,
         max_value=5.0,
+        description="Multiplier for gatherable object respawn speed.",
+        default_value=1.0,
     ),
     "EnemyDropItemRate": SettingDefinition(
-        name="EnemyDropItemRate", value_type=float, min_value=0.1, max_value=5.0
+        name="EnemyDropItemRate",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for item drop rate from enemies.",
+        default_value=1.0,
     ),
     "DeathPenalty": SettingDefinition(
         name="DeathPenalty",
         value_type=str,
         allowed_values=["None", "Item", "ItemAndEquipment", "All"],
+        description="Items lost on player death.",
+        default_value="All",
     ),
     "Difficulty": SettingDefinition(
         name="Difficulty",
         value_type=str,
         allowed_values=["None", "Normal", "Difficult"],
+        description="Server difficulty preset.",
+        default_value="None",
     ),
     "bEnablePlayerToPlayerDamage": SettingDefinition(
-        name="bEnablePlayerToPlayerDamage", value_type=bool
+        name="bEnablePlayerToPlayerDamage",
+        value_type=bool,
+        description="Enable damage between players.",
+        default_value=False,
     ),
     "bEnableFriendlyFire": SettingDefinition(
-        name="bEnableFriendlyFire", value_type=bool
+        name="bEnableFriendlyFire",
+        value_type=bool,
+        description="Enable friendly fire within the same guild.",
+        default_value=False,
     ),
     "bEnableInvaderEnemy": SettingDefinition(
-        name="bEnableInvaderEnemy", value_type=bool
+        name="bEnableInvaderEnemy",
+        value_type=bool,
+        description="Enable enemy raids on player bases.",
+        default_value=True,
     ),
-    "bActiveUNKO": SettingDefinition(name="bActiveUNKO", value_type=bool),
-    "bIsPvP": SettingDefinition(name="bIsPvP", value_type=bool),
+    "bActiveUNKO": SettingDefinition(
+        name="bActiveUNKO",
+        value_type=bool,
+        description="Enable UNKO system.",
+        default_value=False,
+    ),
+    "bIsPvP": SettingDefinition(
+        name="bIsPvP",
+        value_type=bool,
+        description="Enable PvP mode on the server.",
+        default_value=False,
+    ),
     "bCanPickupOtherGuildDeathPenaltyDrop": SettingDefinition(
-        name="bCanPickupOtherGuildDeathPenaltyDrop", value_type=bool
+        name="bCanPickupOtherGuildDeathPenaltyDrop",
+        value_type=bool,
+        description="Allow picking up death drops from other guilds.",
+        default_value=False,
     ),
     "ServerPlayerMaxNum": SettingDefinition(
-        name="ServerPlayerMaxNum", value_type=int, min_value=1, max_value=32
+        name="ServerPlayerMaxNum",
+        value_type=int,
+        min_value=1,
+        max_value=32,
+        description="Maximum number of players on the server.",
+        default_value=32,
     ),
     "GuildPlayerMaxNum": SettingDefinition(
-        name="GuildPlayerMaxNum", value_type=int, min_value=1, max_value=100
+        name="GuildPlayerMaxNum",
+        value_type=int,
+        min_value=1,
+        max_value=100,
+        description="Maximum number of players per guild.",
+        default_value=20,
     ),
     "PalEggDefaultHatchingTime": SettingDefinition(
-        name="PalEggDefaultHatchingTime", value_type=float, min_value=0.0, max_value=240.0
+        name="PalEggDefaultHatchingTime",
+        value_type=float,
+        min_value=0.0,
+        max_value=240.0,
+        description="Time in hours for a Pal egg to hatch.",
+        default_value=72.0,
     ),
     "WorkSpeedRate": SettingDefinition(
-        name="WorkSpeedRate", value_type=float, min_value=0.1, max_value=5.0
+        name="WorkSpeedRate",
+        value_type=float,
+        min_value=0.1,
+        max_value=5.0,
+        description="Multiplier for Pal work speed.",
+        default_value=1.0,
     ),
-    "ServerName": SettingDefinition(name="ServerName", value_type=str),
-    "ServerDescription": SettingDefinition(name="ServerDescription", value_type=str),
-    "AdminPassword": SettingDefinition(name="AdminPassword", value_type=str),
-    "ServerPassword": SettingDefinition(name="ServerPassword", value_type=str),
+    "ServerName": SettingDefinition(
+        name="ServerName",
+        value_type=str,
+        description="Name displayed in the server browser.",
+        default_value="Default Palworld Server",
+    ),
+    "ServerDescription": SettingDefinition(
+        name="ServerDescription",
+        value_type=str,
+        description="Description shown in the server browser.",
+        default_value="",
+    ),
+    "AdminPassword": SettingDefinition(
+        name="AdminPassword",
+        value_type=str,
+        description="Password required for admin access.",
+        default_value="",
+    ),
+    "ServerPassword": SettingDefinition(
+        name="ServerPassword",
+        value_type=str,
+        description="Password required to join the server.",
+        default_value="",
+    ),
     "PublicPort": SettingDefinition(
-        name="PublicPort", value_type=int, min_value=1024, max_value=65535
+        name="PublicPort",
+        value_type=int,
+        min_value=1024,
+        max_value=65535,
+        description="UDP port for game client connections.",
+        default_value=8211,
     ),
     "RCONPort": SettingDefinition(
-        name="RCONPort", value_type=int, min_value=1024, max_value=65535
+        name="RCONPort",
+        value_type=int,
+        min_value=1024,
+        max_value=65535,
+        description="TCP port for RCON remote administration.",
+        default_value=25575,
     ),
     "bIsUseBackupSaveData": SettingDefinition(
-        name="bIsUseBackupSaveData", value_type=bool
+        name="bIsUseBackupSaveData",
+        value_type=bool,
+        description="Enable automatic backup of save data.",
+        default_value=True,
     ),
 }
 
