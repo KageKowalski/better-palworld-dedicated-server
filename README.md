@@ -4,13 +4,13 @@ A lightweight wrapper that manages your Palworld Dedicated Server process on Win
 
 ## Features
 
-- **GUI management interface** — A graphical window with buttons for server control, real-time status display, settings viewer/editor, and help documentation. Launches by default.
+- **GUI management interface** — A graphical window with buttons for server control, real-time status display, a unified settings panel, and help documentation. Launches by default.
 - **Auto-start on connect** — The wrapper listens on the game port. When a player tries to join, it launches the server automatically.
 - **Auto-shutdown on idle** — After 5 minutes (configurable) with no players connected, the server shuts down gracefully.
 - **Scheduled maintenance** — Automatically restarts the server at a configurable interval (default 6 hours), broadcasts a warning to players beforehand, and optionally updates the server via SteamCMD.
 - **Player monitoring** — Tracks connected players via RCON polling.
 - **Dual interface modes** — Choose between a GUI (default) or console interface via `--interface gui|console`.
-- **Settings editor** — View and modify `PalWorldSettings.ini` values with type/range validation, without editing the file by hand (available in both GUI and console modes).
+- **Unified settings panel** — View and modify `PalWorldSettings.ini` values in one place, with descriptions, allowed values, defaults, and type/range validation. Search/filter settings by name or description, and apply changes inline without editing the file by hand (available in both GUI and console modes).
 - **Crash recovery** — If the server process dies unexpectedly, the wrapper resumes monitoring for new connections.
 - **Logging** — Rotating log file with timestamped entries for state changes, player events, and errors. Operational output is additionally shown in the active interface (console stdout or the GUI output panel).
 
@@ -73,8 +73,7 @@ By default, the wrapper launches a graphical management window (title: "Palworld
 | **Server Control** | Start, Stop, and Restart buttons. Buttons are enabled/disabled based on the current server state. A loading indicator appears during operations. |
 | **Status Display** | Real-time display of server state, player count, idle timer, server PID, and uptime. Refreshes automatically every 1 second. |
 | **Output Panel** | Scrollable area displaying operational output (state changes, player events, errors) in real time. Replaces the need for a separate console window. |
-| **Settings View** | All server settings shown alphabetically. Password values are masked. Includes a Refresh button. |
-| **Settings Editor** | Modify any setting by entering a key and value. Type-aware validation and auto-correction feedback is shown before writing. |
+| **Server Settings** | Unified panel showing all settings alphabetically with descriptions, allowed values, defaults, and current values. Each setting has an inline Apply button for direct editing with type-aware validation. Search/filter by name or description. Password values are masked. A pending changes indicator shows queued modifications. Changes made while the server is running are queued and applied on restart. |
 | **Help** | Opens a dialog describing all GUI controls and fields. |
 | **Quit** | Gracefully shuts down the server and closes the wrapper (same as closing the window). |
 

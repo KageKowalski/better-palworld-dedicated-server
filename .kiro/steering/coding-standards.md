@@ -23,7 +23,7 @@
 - The `WrapperCore` is the only class that holds references to all components
 - Result types (`StartResult`, `StopResult`, etc.) are returned instead of raising exceptions for expected failures
 - Unexpected exceptions are caught at component boundaries, logged, and the wrapper continues running
-- **GUI widgets** are implemented as `ttk.LabelFrame` subclasses (one class per visual section: `ControlPanel`, `StatusDisplay`, `SettingsView`, `SettingsEditor`, `NotificationBar`)
+- **GUI widgets** are implemented as `ttk.LabelFrame` subclasses (one class per visual section: `ControlPanel`, `StatusDisplay`, `SettingsPanel`, `NotificationBar`)
 - **Cooperative async pattern** — The GUI's async `run()` method calls `root.update()` every ~33ms and yields control to the asyncio event loop via `await asyncio.sleep(0.033)`. Never use tkinter's blocking `mainloop()`
 - **GUI dialogs** (e.g., `HelpDialog`) extend `tk.Toplevel` for modal behavior
 
