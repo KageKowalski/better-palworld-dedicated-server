@@ -1,0 +1,268 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Create `src/launcher.py` with core detachment functions": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880362996
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880369421
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880501389
+      }
+    ],
+    "2.1 Add `GuiLogHandler` class and enhance `WrapperLogger` in `src/logger.py`": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880363003
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880370197
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880502272
+      }
+    ],
+    "3. Checkpoint - Ensure all tests pass": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880363006
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880646498
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880759794
+      }
+    ],
+    "4.1 Create `OutputPanel` class in `src/gui_interface.py`": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880363009
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880508327
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880635957
+      }
+    ],
+    "4.3 Integrate OutputPanel into GuiInterface layout": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880363014
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880762455
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880765133
+      }
+    ],
+    "5.1 Modify `src/main.py` to support detachment flow": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880363016
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880779269
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880906904
+      }
+    ],
+    "5.2 Configure logging based on interface mode in `run_wrapper()`": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880363019
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880780318
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783881029451
+      }
+    ],
+    "6. Checkpoint - Ensure all tests pass": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880363022
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783881036888
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783881099290
+      }
+    ],
+    "7.1 Ensure graceful shutdown handles detached process correctly": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880363025
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783881102589
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783881304064
+      }
+    ],
+    "7.2 Add display environment detection for spawn failure": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880363028
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783881103596
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783881304742
+      }
+    ],
+    "8. Final Checkpoint - Ensure all tests pass": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880363031
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783881308899
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783881357238
+      }
+    ],
+    "9.1 Update `README.md` to document standalone GUI behavior": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880363034
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783881364892
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783881492806
+      }
+    ],
+    "9.2 Update `.kiro/` directory documentation if applicable": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880363036
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783881365842
+      },
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783881493617
+      }
+    ],
+    "1. Create the Launcher Module": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880501392
+      }
+    ],
+    "2. Enhance the Logging System": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880502275
+      }
+    ],
+    "4. Add the GUI Output Panel": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783880765136
+      }
+    ],
+    "5. Integrate Launcher into Entry Point": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783881029457
+      }
+    ],
+    "7. Wire Shutdown and Final Integration": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783881304751
+      }
+    ],
+    "9. Update Documentation": [
+      {
+        "executionId": "e5254596-69e7-42ed-9e65-c1785f3947f6",
+        "chatSessionId": "24296efd-1145-49b0-a8f0-377eb37dfca9",
+        "timestamp": 1783881493626
+      }
+    ]
+  }
+}

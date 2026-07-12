@@ -19,6 +19,7 @@ import pytest
 
 from src.config import WrapperConfig
 from src.gui_interface import GuiInterface, GuiState, NotificationState
+from src.models import ServerState
 
 
 @pytest.fixture
@@ -603,6 +604,316 @@ class TestShutdownControls:
 
         # Should not raise
         gui._disable_all_controls()
+
+
+@patch.object(GuiInterface, '_build_ui')
+class TestGracefulShutdownDetachedProcess:
+    """Tests for graceful shutdown handling in the detached process scenario.
+
+    Covers:
+    - Requirement 5.1: Shutdown disables controls, shows status, invokes quit
+    - Requirement 5.2: Shutdown completes or times out within 30s, destroys window
+    - Requirement 5.3: Process tree is terminated via WrapperCore quit/cleanup
+    - Requirement 5.5: MONITORING state skips server stop, completes quickly
+    """
+
+    @patch("src.gui_interface.tk.Tk")
+    async def test_shutdown_full_sequence_order(
+        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
+    ):
+        """Shutdown should: disable controls → show status → call quit → destroy window.
+
+        Validates Requirement 5.1: disable controls, display shutdown status,
+        invoke graceful shutdown sequence.
+        """
+        mock_root = MagicMock()
+        mock_tk_class.return_value = mock_root
+
+        call_order = []
+
+        gui = GuiInterface(mock_wrapper_core, config)
+        gui._control_panel = MagicMock()
+        gui._control_panel.set_loading.side_effect = lambda x: call_order.append("disable_controls")
+        gui._notification_bar = MagicMock()
+        gui._notification_bar.show_error.side_effect = lambda msg: call_order.append("show_status")
+        gui._quit_button = MagicMock()
+        gui._help_button = MagicMock()
+
+        async def mock_quit():
+            call_order.append("quit")
+
+        mock_wrapper_core.quit = mock_quit
+        mock_root.destroy.side_effect = lambda: call_order.append("destroy")
+
+        await gui._shutdown()
+
+        assert "disable_controls" in call_order
+        assert "show_status" in call_order
+        assert "quit" in call_order
+        assert "destroy" in call_order
+        # Verify order: disable and show status before quit, quit before destroy
+        assert call_order.index("disable_controls") < call_order.index("quit")
+        assert call_order.index("show_status") < call_order.index("quit")
+        assert call_order.index("quit") < call_order.index("destroy")
+
+    @patch("src.gui_interface.tk.Tk")
+    async def test_shutdown_with_30s_timeout_on_quit(
+        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
+    ):
+        """Shutdown should use a 30-second timeout when calling WrapperCore.quit().
+
+        Validates Requirement 5.2: 30-second timeout for shutdown.
+        """
+        mock_root = MagicMock()
+        mock_tk_class.return_value = mock_root
+
+        gui = GuiInterface(mock_wrapper_core, config)
+
+        # Track what wait_for is called with
+        captured_timeout = None
+        original_wait_for = asyncio.wait_for
+
+        async def capture_wait_for(coro, timeout):
+            nonlocal captured_timeout
+            captured_timeout = timeout
+            return await original_wait_for(coro, timeout=timeout)
+
+        with patch("src.gui_interface.asyncio.wait_for", side_effect=capture_wait_for):
+            await gui._shutdown()
+
+        assert captured_timeout == 30.0
+
+    @patch("src.gui_interface.tk.Tk")
+    async def test_shutdown_sets_running_false_and_exits_loop(
+        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
+    ):
+        """Shutdown should set _running = False so cooperative loop exits.
+
+        Validates Requirement 5.2: exit with code 0 after shutdown.
+        """
+        mock_root = MagicMock()
+        mock_tk_class.return_value = mock_root
+
+        gui = GuiInterface(mock_wrapper_core, config)
+        gui._running = True
+
+        await gui._shutdown()
+
+        assert gui._running is False
+
+    @patch("src.gui_interface.tk.Tk")
+    async def test_shutdown_monitoring_state_skips_server_stop(
+        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
+    ):
+        """When server is in MONITORING state, quit/cleanup should skip stop_server.
+
+        Validates Requirement 5.5: Skip server stop step when not running,
+        proceed directly to cleanup.
+        """
+        from src.wrapper_core import WrapperCore
+        from src.config import WrapperConfig
+
+        mock_root = MagicMock()
+        mock_tk_class.return_value = mock_root
+
+        # Use a real WrapperCore to test the actual cleanup logic
+        real_config = WrapperConfig(
+            server_exe_path=config.server_exe_path,
+            settings_file_path=config.settings_file_path,
+        )
+        real_core = WrapperCore(real_config)
+
+        # Set state to MONITORING (server not running)
+        real_core._state = ServerState.MONITORING
+
+        # Mock process manager to verify stop_server is NOT called
+        real_core._process_manager.is_running = AsyncMock(return_value=False)
+        real_core._process_manager.stop_server = AsyncMock(
+            return_value=MagicMock(success=True)
+        )
+        real_core._connection_listener.stop_listening = AsyncMock()
+        real_core._rcon_client.disconnect = AsyncMock()
+        real_core._logger.log_state_transition = MagicMock()
+
+        gui = GuiInterface(real_core, config)
+
+        await gui._shutdown()
+
+        # stop_server should NOT have been called since server is not running
+        real_core._process_manager.stop_server.assert_not_called()
+
+    @patch("src.gui_interface.tk.Tk")
+    async def test_shutdown_monitoring_state_completes_quickly(
+        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
+    ):
+        """When in MONITORING state, shutdown should complete well within 5 seconds.
+
+        Validates Requirement 5.5: cleanup and exit within 5 seconds.
+        """
+        from src.wrapper_core import WrapperCore
+        from src.config import WrapperConfig
+
+        mock_root = MagicMock()
+        mock_tk_class.return_value = mock_root
+
+        real_config = WrapperConfig(
+            server_exe_path=config.server_exe_path,
+            settings_file_path=config.settings_file_path,
+        )
+        real_core = WrapperCore(real_config)
+        real_core._state = ServerState.MONITORING
+        real_core._process_manager.is_running = AsyncMock(return_value=False)
+        real_core._process_manager.stop_server = AsyncMock()
+        real_core._connection_listener.stop_listening = AsyncMock()
+        real_core._rcon_client.disconnect = AsyncMock()
+        real_core._logger.log_state_transition = MagicMock()
+
+        gui = GuiInterface(real_core, config)
+
+        # Shutdown should complete within 5 seconds (well under the 30s timeout)
+        try:
+            await asyncio.wait_for(gui._shutdown(), timeout=5.0)
+        except asyncio.TimeoutError:
+            pytest.fail("Shutdown in MONITORING state did not complete within 5 seconds")
+
+    @patch("src.gui_interface.tk.Tk")
+    async def test_shutdown_running_state_calls_process_tree_termination(
+        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
+    ):
+        """When server is RUNNING, WrapperCore._cleanup() invokes process tree termination.
+
+        Validates Requirement 5.3: terminate entire server process tree
+        (WrapperCore uses taskkill /F /T via ProcessManager.stop_server).
+
+        Note: GuiInterface._shutdown() calls WrapperCore.quit() which sets the
+        quit event. WrapperCore.run() then calls _cleanup() which checks
+        is_running() and calls stop_server() if True. We test _cleanup() directly
+        to verify the process termination path.
+        """
+        from src.wrapper_core import WrapperCore
+        from src.config import WrapperConfig
+
+        mock_root = MagicMock()
+        mock_tk_class.return_value = mock_root
+
+        real_config = WrapperConfig(
+            server_exe_path=config.server_exe_path,
+            settings_file_path=config.settings_file_path,
+        )
+        real_core = WrapperCore(real_config)
+
+        # Simulate server IS running when cleanup checks
+        real_core._process_manager.is_running = AsyncMock(return_value=True)
+        real_core._process_manager.stop_server = AsyncMock(
+            return_value=MagicMock(success=True)
+        )
+        real_core._connection_listener.stop_listening = AsyncMock()
+        real_core._rcon_client.disconnect = AsyncMock()
+
+        # Directly test the cleanup path that runs after quit
+        await real_core._cleanup()
+
+        # stop_server should have been called to terminate the process tree
+        real_core._process_manager.stop_server.assert_called_once_with(
+            timeout=real_config.stop_timeout_seconds
+        )
+
+    @patch("src.gui_interface.tk.Tk")
+    async def test_shutdown_prevents_double_execution(
+        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
+    ):
+        """Shutdown should be idempotent - second call is a no-op.
+
+        Prevents multiple close events from causing issues in the
+        detached process scenario.
+        """
+        mock_root = MagicMock()
+        mock_tk_class.return_value = mock_root
+
+        quit_call_count = 0
+
+        async def counting_quit():
+            nonlocal quit_call_count
+            quit_call_count += 1
+
+        mock_wrapper_core.quit = counting_quit
+
+        gui = GuiInterface(mock_wrapper_core, config)
+
+        await gui._shutdown()
+        await gui._shutdown()  # Second call should be no-op
+
+        assert quit_call_count == 1
+
+    @patch("src.gui_interface.tk.Tk")
+    async def test_shutdown_disables_all_interactive_controls(
+        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
+    ):
+        """Shutdown disables Start/Stop/Restart, Apply, Refresh, Help, Quit buttons.
+
+        Validates Requirement 5.1: disable all interactive controls.
+        """
+        mock_root = MagicMock()
+        mock_tk_class.return_value = mock_root
+
+        gui = GuiInterface(mock_wrapper_core, config)
+        gui._control_panel = MagicMock()
+        gui._settings_editor = MagicMock()
+        gui._settings_editor._apply_button = MagicMock()
+        gui._settings_view = MagicMock()
+        gui._settings_view._refresh_button = MagicMock()
+        gui._quit_button = MagicMock()
+        gui._help_button = MagicMock()
+
+        await gui._shutdown()
+
+        # Control panel should be set to loading (all buttons disabled)
+        gui._control_panel.set_loading.assert_called_with(True)
+        # Settings editor Apply button should be disabled
+        gui._settings_editor._apply_button.configure.assert_called_with(state="disabled")
+        # Settings view Refresh button should be disabled
+        gui._settings_view._refresh_button.configure.assert_called_with(state="disabled")
+        # Quit button should be disabled
+        gui._quit_button.configure.assert_called_with(state="disabled")
+        # Help button should be disabled
+        gui._help_button.configure.assert_called_with(state="disabled")
+
+    @patch("src.gui_interface.tk.Tk")
+    async def test_shutdown_shows_shutting_down_notification(
+        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
+    ):
+        """Shutdown shows 'Shutting down...' in the notification bar.
+
+        Validates Requirement 5.1: display a shutdown status indication.
+        """
+        mock_root = MagicMock()
+        mock_tk_class.return_value = mock_root
+
+        gui = GuiInterface(mock_wrapper_core, config)
+        gui._notification_bar = MagicMock()
+
+        await gui._shutdown()
+
+        gui._notification_bar.show_error.assert_called_with("Shutting down...")
+
+    @patch("src.gui_interface.tk.Tk")
+    async def test_shutdown_timeout_still_destroys_window(
+        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
+    ):
+        """If WrapperCore.quit() times out, window is still destroyed.
+
+        Validates Requirement 5.2: force-close after 30s timeout.
+        """
+        mock_root = MagicMock()
+        mock_tk_class.return_value = mock_root
+
+        # Simulate timeout by patching wait_for to raise TimeoutError
+        with patch("src.gui_interface.asyncio.wait_for", side_effect=asyncio.TimeoutError):
+            gui = GuiInterface(mock_wrapper_core, config)
+            await gui._shutdown()
+
+        mock_root.destroy.assert_called_once()
+        assert gui._running is False
 
 
 class TestStatusDisplay:
@@ -2262,3 +2573,162 @@ class TestHelpDialogMocked:
             dialog = HelpDialog(mock_parent)
 
         mock_focus.assert_called_once()
+
+
+
+
+class TestOutputPanel:
+    """Tests for the OutputPanel widget class.
+
+    Covers:
+    - OutputPanel is a ttk.LabelFrame with text="Output"
+    - Text widget is read-only (state="disabled")
+    - append_message schedules insert via root.after
+    - append_message inserts text and newline
+    - append_message trims lines exceeding MAX_LINES (1000)
+    - append_message auto-scrolls to bottom
+    - clear() removes all content
+    - MAX_LINES class constant is 1000
+    """
+
+    @pytest.fixture
+    def root(self):
+        """Create a tkinter root window for testing."""
+        import tkinter as tk
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            yield root
+            root.destroy()
+        except tk.TclError:
+            pytest.skip("No display available for tkinter tests")
+
+    @pytest.fixture
+    def output_panel(self, root):
+        """Create an OutputPanel instance for testing."""
+        from src.gui_interface import OutputPanel
+        panel = OutputPanel(root)
+        return panel
+
+    def test_is_label_frame_with_output_text(self, output_panel):
+        """OutputPanel should be a LabelFrame with text='Output'."""
+        assert output_panel.cget("text") == "Output"
+
+    def test_max_lines_constant(self):
+        """MAX_LINES class constant should be 1000."""
+        from src.gui_interface import OutputPanel
+        assert OutputPanel.MAX_LINES == 1000
+
+    def test_text_widget_is_read_only(self, output_panel):
+        """Text widget should be in disabled (read-only) state initially."""
+        assert output_panel._text_widget.cget("state") == "disabled"
+
+    def test_append_message_schedules_via_after(self, root, output_panel):
+        """append_message should schedule the insert via root.after(0, ...)."""
+        from unittest.mock import patch as mock_patch
+
+        with mock_patch.object(root, "after") as mock_after:
+            output_panel.append_message("test message")
+            mock_after.assert_called_once()
+            # First arg should be 0 (immediate scheduling)
+            assert mock_after.call_args[0][0] == 0
+
+    def test_append_message_inserts_text(self, root, output_panel):
+        """append_message should insert the message text into the widget."""
+        output_panel.append_message("Hello, World!")
+        # Process the scheduled after callback
+        root.update()
+
+        output_panel._text_widget.configure(state="normal")
+        content = output_panel._text_widget.get("1.0", "end-1c")
+        output_panel._text_widget.configure(state="disabled")
+        assert "Hello, World!" in content
+
+    def test_append_message_adds_newline(self, root, output_panel):
+        """append_message should add a newline after each message."""
+        output_panel.append_message("Line 1")
+        output_panel.append_message("Line 2")
+        root.update()
+
+        output_panel._text_widget.configure(state="normal")
+        content = output_panel._text_widget.get("1.0", "end-1c")
+        output_panel._text_widget.configure(state="disabled")
+        lines = content.split("\n")
+        assert lines[0] == "Line 1"
+        assert lines[1] == "Line 2"
+
+    def test_append_message_trims_excess_lines(self, root, output_panel):
+        """append_message should trim lines exceeding MAX_LINES."""
+        from src.gui_interface import OutputPanel
+
+        # Temporarily set a smaller MAX_LINES for testing
+        original_max = OutputPanel.MAX_LINES
+        OutputPanel.MAX_LINES = 5
+        try:
+            for i in range(8):
+                output_panel.append_message(f"Line {i}")
+            root.update()
+
+            output_panel._text_widget.configure(state="normal")
+            content = output_panel._text_widget.get("1.0", "end-1c")
+            output_panel._text_widget.configure(state="disabled")
+            lines = [l for l in content.split("\n") if l]
+            # Should have at most 5 lines (the most recent ones)
+            assert len(lines) <= 5
+            # The most recent lines should be preserved
+            assert lines[-1] == "Line 7"
+        finally:
+            OutputPanel.MAX_LINES = original_max
+
+    def test_append_message_auto_scrolls_to_bottom(self, root, output_panel):
+        """append_message should auto-scroll to the end after inserting."""
+        # Add enough messages to cause scrolling
+        for i in range(50):
+            output_panel.append_message(f"Message {i}")
+        root.update()
+
+        # Check that the view is scrolled to the end
+        yview = output_panel._text_widget.yview()
+        # yview() returns (top_fraction, bottom_fraction)
+        # If scrolled to the end, bottom should be 1.0
+        assert yview[1] == 1.0
+
+    def test_clear_removes_all_content(self, root, output_panel):
+        """clear() should remove all text from the widget."""
+        output_panel.append_message("Some content")
+        root.update()
+
+        output_panel.clear()
+
+        output_panel._text_widget.configure(state="normal")
+        content = output_panel._text_widget.get("1.0", "end-1c")
+        output_panel._text_widget.configure(state="disabled")
+        assert content == ""
+
+    def test_clear_leaves_widget_read_only(self, root, output_panel):
+        """clear() should leave the widget in disabled state."""
+        output_panel.append_message("content")
+        root.update()
+        output_panel.clear()
+        assert output_panel._text_widget.cget("state") == "disabled"
+
+    def test_text_widget_has_scrollbar(self, output_panel):
+        """OutputPanel should have a scrollbar configured."""
+        # The scrollbar should exist and be connected to the text widget
+        assert hasattr(output_panel, "_scrollbar")
+        assert output_panel._scrollbar is not None
+
+
+class TestOutputPanelMocked:
+    """Tests for OutputPanel using mocked tkinter (no display required)."""
+
+    def test_max_lines_is_1000(self):
+        """OutputPanel.MAX_LINES should be 1000."""
+        from src.gui_interface import OutputPanel
+        assert OutputPanel.MAX_LINES == 1000
+
+    def test_class_inherits_from_label_frame(self):
+        """OutputPanel should inherit from ttk.LabelFrame."""
+        from tkinter import ttk as ttk_module
+        from src.gui_interface import OutputPanel
+        assert issubclass(OutputPanel, ttk_module.LabelFrame)
