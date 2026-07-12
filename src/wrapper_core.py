@@ -8,6 +8,7 @@ IdleTimer, WrapperLogger, and SettingsParser.
 import asyncio
 import logging
 from datetime import datetime, timezone
+from typing import Callable
 
 from src.config import WrapperConfig
 from src.connection_listener import ConnectionListener
@@ -22,6 +23,7 @@ from src.models import (
     StopResult,
     WrapperStatus,
 )
+from src.pending_settings import ApplyResult, PendingSettingsQueue
 from src.process_manager import ProcessManager
 from src.rcon_client import RconClient
 from src.settings_parser import SettingsParser
@@ -80,6 +82,10 @@ class WrapperCore:
         )
         self._maintenance_in_progress: bool = False
 
+        # Pending settings queue and notification callbacks
+        self._pending_queue = PendingSettingsQueue()
+        self._apply_callbacks: list[Callable[[ApplyResult], None]] = []
+
     @property
     def state(self) -> ServerState:
         """Current state of the wrapper state machine."""
@@ -89,6 +95,31 @@ class WrapperCore:
     def player_count(self) -> int:
         """Current connected player count."""
         return self._player_count
+
+    @property
+    def pending_queue(self) -> PendingSettingsQueue:
+        """The pending settings queue instance."""
+        return self._pending_queue
+
+    def register_apply_callback(self, callback: Callable[[ApplyResult], None]) -> None:
+        """Register a callback to be invoked when pending settings are applied.
+
+        Args:
+            callback: A callable that receives an ApplyResult instance.
+        """
+        self._apply_callbacks.append(callback)
+
+    def _notify_apply_result(self, result: ApplyResult) -> None:
+        """Fire all registered apply result callbacks.
+
+        Args:
+            result: The ApplyResult to pass to each callback.
+        """
+        for callback in self._apply_callbacks:
+            try:
+                callback(result)
+            except Exception as e:
+                logger.warning("Apply result callback failed: %s", e)
 
     async def run(self) -> None:
         """Main entry point - sets up logger, starts monitoring, and runs until quit.
@@ -239,6 +270,11 @@ class WrapperCore:
         # Transition to MONITORING
         self._transition_to(ServerState.MONITORING, "Server process crashed")
 
+        # Apply any pending settings changes
+        apply_result = self._pending_queue.apply(self._config.settings_file_path)
+        if apply_result.applied_count > 0 or apply_result.failed_key is not None:
+            self._notify_apply_result(apply_result)
+
         # Restart the connection listener
         await self._connection_listener.start_listening()
 
@@ -342,6 +378,11 @@ class WrapperCore:
 
         # Transition to MONITORING
         self._transition_to(ServerState.MONITORING, "Server stopped")
+
+        # Apply any pending settings changes
+        apply_result = self._pending_queue.apply(self._config.settings_file_path)
+        if apply_result.applied_count > 0 or apply_result.failed_key is not None:
+            self._notify_apply_result(apply_result)
 
         # Restart the connection listener
         await self._connection_listener.start_listening()

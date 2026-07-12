@@ -22,7 +22,9 @@ from typing import Any
 
 from src.config import WrapperConfig
 from src.models import ServerState, WrapperStatus
+from src.pending_settings import ApplyResult, PendingSettingsQueue
 from src.settings_parser import SETTING_DEFINITIONS, SettingsParser
+from src.settings_write_handler import SettingsWriteHandler
 from src.validation import (
     CorrectionResult,
     PASSWORD_MASK,
@@ -53,6 +55,34 @@ class ManagementInterface:
         self._config = config
         self._settings_parser = SettingsParser()
         self._running = False
+        self._settings_write_handler = SettingsWriteHandler(
+            wrapper_core=wrapper_core,
+            pending_queue=wrapper_core.pending_queue,
+            settings_file_path=config.settings_file_path,
+        )
+        # Register apply result callback for CLI notifications
+        wrapper_core.register_apply_callback(self._on_apply_result)
+
+    def _on_apply_result(self, result: ApplyResult) -> None:
+        """Handle notification when pending settings are applied.
+
+        Displays success or failure message to the CLI based on the apply result.
+
+        Args:
+            result: The ApplyResult from the apply operation.
+        """
+        if result.failed_key is not None:
+            error_msg = result.error_message or "Unknown error"
+            if len(error_msg) > 200:
+                error_msg = error_msg[:200]
+            print(
+                f"Error applying pending settings: {error_msg}. "
+                f"{result.remaining_count} change(s) remain queued."
+            )
+        elif result.applied_count > 0:
+            print(
+                f"{result.applied_count} pending setting(s) applied to PalWorldSettings.ini."
+            )
 
     async def run(self) -> None:
         """Main entry point - run the interactive command loop.
@@ -165,6 +195,8 @@ class ManagementInterface:
             await self._cmd_settings()
         elif cmd == "set":
             await self._cmd_set(parts)
+        elif cmd == "pending":
+            await self._cmd_pending(parts)
         elif cmd == "help":
             await self._cmd_help()
         elif cmd == "quit":
@@ -263,7 +295,7 @@ class ManagementInterface:
         """Handle the 'set <key> <value>' command.
 
         Validates and auto-corrects user input based on the setting's type
-        definition before delegating to SettingsParser.write_setting.
+        definition before delegating to SettingsWriteHandler.submit().
 
         Args:
             parts: The split command parts (["set", "<key>", "<value>"]).
@@ -283,29 +315,34 @@ class ManagementInterface:
             return
         correction = result
 
-        # Write the corrected value
-        write_result = self._settings_parser.write_setting(
-            self._config.settings_file_path, key, correction.value
+        # Submit through the write handler (routes to file or queue)
+        write_result, was_queued = self._settings_write_handler.submit(
+            key, correction.value
         )
 
         if write_result.valid:
-            if correction.was_corrected:
-                await self.display_message(
-                    f"Setting '{key}' updated to '{correction.value}' "
-                    f"(auto-corrected from '{correction.original_input}')."
-                )
+            if was_queued:
+                if correction.was_corrected:
+                    await self.display_message(
+                        f"Setting '{key}' queued as '{correction.value}' "
+                        f"(auto-corrected from '{correction.original_input}'). "
+                        f"It will be applied when the server stops."
+                    )
+                else:
+                    await self.display_message(
+                        f"Setting '{key}' queued as '{correction.value}'. "
+                        f"It will be applied when the server stops."
+                    )
             else:
-                await self.display_message(
-                    f"Setting '{key}' updated to '{correction.value}'."
-                )
-
-            # Warn if server is running that restart is required
-            status = self._wrapper_core.get_status()
-            if status.server_state == ServerState.RUNNING:
-                await self.display_message(
-                    "Warning: Setting modified while server is running. "
-                    "A restart is required for changes to take effect."
-                )
+                if correction.was_corrected:
+                    await self.display_message(
+                        f"Setting '{key}' updated to '{correction.value}' "
+                        f"(auto-corrected from '{correction.original_input}')."
+                    )
+                else:
+                    await self.display_message(
+                        f"Setting '{key}' updated to '{correction.value}'."
+                    )
         else:
             await self.display_message(
                 f"Failed to update setting: {write_result.error_message}"
@@ -363,6 +400,39 @@ class ManagementInterface:
 
         return _correct_boolean(key, value)
 
+    async def _cmd_pending(self, parts: list[str]) -> None:
+        """Handle the 'pending' command to list or clear queued entries.
+
+        Subcommands:
+            pending       - List all pending setting changes
+            pending clear - Discard all pending setting changes
+
+        Args:
+            parts: The split command parts (["pending"] or ["pending", "clear"]).
+        """
+        # Check for "pending clear" subcommand
+        if len(parts) >= 2 and parts[1].lower() == "clear":
+            await self._cmd_pending_clear()
+            return
+
+        queue = self._wrapper_core.pending_queue
+        if queue.is_empty():
+            await self.display_message("No pending setting changes.")
+            return
+
+        await self.display_message("Pending setting changes:")
+        for key, value in queue.entries():
+            await self.display_message(f"  {key} = {value}")
+
+    async def _cmd_pending_clear(self) -> None:
+        """Handle the 'pending clear' command to discard all pending changes."""
+        queue = self._wrapper_core.pending_queue
+        if queue.is_empty():
+            await self.display_message("No pending setting changes.")
+            return
+        queue.clear()
+        await self.display_message("Pending changes cleared.")
+
     async def _cmd_help(self) -> None:
         """Handle the 'help' command."""
         help_text = (
@@ -373,6 +443,8 @@ class ManagementInterface:
             "  status           - Display current server status\n"
             "  settings         - Display all server settings\n"
             "  set <key> <value> - Modify a server setting\n"
+            "  pending          - Show pending setting changes\n"
+            "  pending clear    - Discard all pending setting changes\n"
             "  help             - Show this help message\n"
             "  quit             - Shut down the wrapper"
         )
