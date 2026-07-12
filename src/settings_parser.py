@@ -24,6 +24,8 @@ class SettingDefinition:
         min_value: Minimum allowed value (for numeric types).
         max_value: Maximum allowed value (for numeric types).
         allowed_values: Explicit list of allowed values (for enum-like settings).
+        description: Human-readable explanation of the setting (max 120 chars).
+        default_value: The server's documented default value (None if unknown).
     """
 
     name: str
@@ -31,6 +33,8 @@ class SettingDefinition:
     min_value: Any = None
     max_value: Any = None
     allowed_values: list[Any] | None = None
+    description: str = ""
+    default_value: Any = None
 
 
 # Common Palworld server setting definitions with their types and ranges
