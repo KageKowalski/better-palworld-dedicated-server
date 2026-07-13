@@ -36,7 +36,7 @@ class WrapperLogger:
     """
 
     def __init__(self) -> None:
-        self._logger: logging.Logger = logging.getLogger("palworld_wrapper")
+        self._logger: logging.Logger = logging.getLogger("src")
         self._gui_handler: logging.Handler | None = None
         self._console_handler: logging.Handler | None = None
 
@@ -62,6 +62,9 @@ class WrapperLogger:
             gui_callback: Callback for GUI mode to receive log messages.
         """
         self._logger.setLevel(logging.DEBUG)
+
+        # Prevent propagation to root logger to avoid duplicates with basicConfig
+        self._logger.propagate = False
 
         # Remove any existing handlers to avoid duplicates on re-setup
         self._logger.handlers.clear()

@@ -122,19 +122,14 @@ class WrapperCore:
                 logger.warning("Apply result callback failed: %s", e)
 
     async def run(self) -> None:
-        """Main entry point - sets up logger, starts monitoring, and runs until quit.
+        """Main entry point - starts monitoring and runs until quit.
 
-        This is the asyncio event loop entry point. It sets up the logger,
-        starts the connection listener in MONITORING state, and runs indefinitely
-        until quit() is called.
+        This is the asyncio event loop entry point. It starts the connection
+        listener in MONITORING state and runs indefinitely until quit() is called.
+
+        Note: Logger setup is handled by the caller (main.py) before this method
+        is invoked, to avoid clobbering mode-specific handlers (GUI/console).
         """
-        # Set up the logger
-        self._logger.setup(
-            log_path=self._config.log_file_path,
-            max_size_mb=self._config.log_max_size_mb,
-            backup_count=self._config.log_backup_count,
-        )
-
         logger.info("Wrapper starting in MONITORING state")
 
         # Start in MONITORING state with the connection listener active
