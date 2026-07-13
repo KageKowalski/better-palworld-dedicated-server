@@ -35,10 +35,21 @@ class WrapperLogger:
     configurable size limit with a configurable number of backups retained.
     """
 
+    _FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
+    _DATEFMT = "%Y-%m-%dT%H:%M:%S%z"
+
     def __init__(self) -> None:
         self._logger: logging.Logger = logging.getLogger("src")
         self._gui_handler: logging.Handler | None = None
         self._console_handler: logging.Handler | None = None
+
+    @classmethod
+    def _make_formatter(cls) -> logging.Formatter:
+        """Create a standard log formatter with ISO 8601 timestamps."""
+        formatter = logging.Formatter(fmt=cls._FORMAT, datefmt=cls._DATEFMT)
+        formatter.default_time_format = "%Y-%m-%dT%H:%M:%S"
+        formatter.default_msec_format = None
+        return formatter
 
     def setup(
         self,
@@ -70,13 +81,7 @@ class WrapperLogger:
         self._logger.handlers.clear()
 
         max_bytes = max_size_mb * 1024 * 1024
-
-        formatter = logging.Formatter(
-            fmt="%(asctime)s [%(levelname)s] %(message)s",
-            datefmt="%Y-%m-%dT%H:%M:%S%z",
-        )
-        formatter.default_time_format = "%Y-%m-%dT%H:%M:%S"
-        formatter.default_msec_format = None
+        formatter = self._make_formatter()
 
         # Always add RotatingFileHandler, but handle open errors gracefully
         try:
@@ -101,12 +106,7 @@ class WrapperLogger:
 
     def add_console_handler(self) -> None:
         """Add a StreamHandler writing to stdout (INFO level)."""
-        formatter = logging.Formatter(
-            fmt="%(asctime)s [%(levelname)s] %(message)s",
-            datefmt="%Y-%m-%dT%H:%M:%S%z",
-        )
-        formatter.default_time_format = "%Y-%m-%dT%H:%M:%S"
-        formatter.default_msec_format = None
+        formatter = self._make_formatter()
 
         self._console_handler = logging.StreamHandler(sys.stdout)
         self._console_handler.setLevel(logging.INFO)
@@ -120,12 +120,7 @@ class WrapperLogger:
             callback: Function accepting a formatted log string, called for
                 each operational-level message (INFO and above).
         """
-        formatter = logging.Formatter(
-            fmt="%(asctime)s [%(levelname)s] %(message)s",
-            datefmt="%Y-%m-%dT%H:%M:%S%z",
-        )
-        formatter.default_time_format = "%Y-%m-%dT%H:%M:%S"
-        formatter.default_msec_format = None
+        formatter = self._make_formatter()
 
         self._gui_handler = GuiLogHandler(callback)
         self._gui_handler.setFormatter(formatter)

@@ -22,14 +22,17 @@ from typing import Any
 
 from src.config import WrapperConfig
 from src.models import ServerState, WrapperStatus
-from src.pending_settings import ApplyResult, PendingSettingsQueue
-from src.settings_parser import SETTING_DEFINITIONS, SettingsParser
+from src.pending_settings import ApplyResult
+from src.settings_parser import SettingsParser
 from src.settings_write_handler import SettingsWriteHandler
 from src.validation import (
     CorrectionResult,
     PASSWORD_MASK,
     is_password_setting,
     validate_and_correct,
+    _correct_boolean,
+    _correct_string,
+    _validate_and_correct as _val_correct,
 )
 from src.wrapper_core import WrapperCore
 
@@ -262,17 +265,6 @@ class ManagementInterface:
         status = self._wrapper_core.get_status()
         await self.display_status(status)
 
-    def _is_password_setting(self, key: str) -> bool:
-        """Check if a setting key is a password field.
-
-        Args:
-            key: The setting key name to check.
-
-        Returns:
-            True when key contains the substring "Password" (case-sensitive).
-        """
-        return is_password_setting(key)
-
     async def _cmd_settings(self) -> None:
         """Handle the 'settings' command."""
         settings = self._settings_parser.read_settings(self._config.settings_file_path)
@@ -288,7 +280,7 @@ class ManagementInterface:
         await self.display_message("Current Server Settings:")
         await self.display_message("-" * 40)
         for key, value in sorted(settings.items()):
-            display_value = PASSWORD_MASK if self._is_password_setting(key) else value
+            display_value = PASSWORD_MASK if is_password_setting(key) else value
             await self.display_message(f"  {key} = {display_value}")
 
     async def _cmd_set(self, parts: list[str]) -> None:
@@ -365,8 +357,6 @@ class ManagementInterface:
             CorrectionResult with the corrected value on success, or an error
             message string on validation failure.
         """
-        from src.validation import _validate_and_correct as _val_correct
-
         return _val_correct(key, value, definition)
 
     def _correct_string(self, value: str) -> CorrectionResult:
@@ -380,8 +370,6 @@ class ManagementInterface:
         Returns:
             CorrectionResult with the corrected string value.
         """
-        from src.validation import _correct_string
-
         return _correct_string(value)
 
     def _correct_boolean(self, key: str, value: str) -> "CorrectionResult | str":
@@ -396,8 +384,6 @@ class ManagementInterface:
         Returns:
             CorrectionResult with normalized boolean, or error message string.
         """
-        from src.validation import _correct_boolean
-
         return _correct_boolean(key, value)
 
     async def _cmd_pending(self, parts: list[str]) -> None:

@@ -219,7 +219,6 @@ class ProcessManager:
         """
         try:
             loop = asyncio.get_event_loop()
-            # Use a non-blocking socket connect via the event loop
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.setblocking(False)
             try:
