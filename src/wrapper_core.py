@@ -7,7 +7,6 @@ IdleTimer, WrapperLogger, and SettingsParser.
 
 import asyncio
 import logging
-from datetime import datetime, timezone
 from typing import Callable
 
 from src.config import WrapperConfig
@@ -19,7 +18,6 @@ from src.models import (
     RestartResult,
     ServerState,
     StartResult,
-    StateTransitionEvent,
     StopResult,
     WrapperStatus,
 )
@@ -643,7 +641,7 @@ class WrapperCore:
         Schedules handle_connection_detected as an asyncio task. This is
         a synchronous callback that bridges into async code.
         """
-        asyncio.ensure_future(self.handle_connection_detected())
+        asyncio.create_task(self.handle_connection_detected())
 
     async def _enter_running_state(self) -> None:
         """Transition to RUNNING state and start RCON polling + idle timer."""
@@ -679,14 +677,6 @@ class WrapperCore:
             old_state.value,
             new_state.value,
             reason,
-        )
-
-        # Record the event
-        StateTransitionEvent(
-            timestamp=datetime.now(tz=timezone.utc),
-            from_state=old_state,
-            to_state=new_state,
-            reason=reason,
         )
 
     def _start_rcon_polling(self) -> None:

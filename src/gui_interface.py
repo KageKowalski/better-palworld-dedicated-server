@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 from src.config import WrapperConfig
 from src.models import ServerState, WrapperStatus
-from src.pending_settings import ApplyResult, PendingSettingsQueue
+from src.pending_settings import ApplyResult
 from src.settings_panel import SettingsPanel
 from src.settings_parser import SettingsParser
 from src.settings_write_handler import SettingsWriteHandler
@@ -115,13 +115,13 @@ class GuiInterface:
         # 1. Control Panel - Server lifecycle buttons
         self._control_panel = ControlPanel(
             self._root,
-            on_start=lambda: asyncio.ensure_future(
+            on_start=lambda: asyncio.create_task(
                 self._execute_server_operation("start")
             ),
-            on_stop=lambda: asyncio.ensure_future(
+            on_stop=lambda: asyncio.create_task(
                 self._execute_server_operation("stop")
             ),
-            on_restart=lambda: asyncio.ensure_future(
+            on_restart=lambda: asyncio.create_task(
                 self._execute_server_operation("restart")
             ),
         )
@@ -256,7 +256,7 @@ class GuiInterface:
 
         Schedules the async _shutdown() method as a task on the running event loop.
         """
-        asyncio.ensure_future(self._shutdown())
+        asyncio.create_task(self._shutdown())
 
     def _on_apply_result(self, result: ApplyResult) -> None:
         """Handle notification when pending settings are applied."""
