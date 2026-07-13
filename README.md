@@ -4,23 +4,21 @@ A lightweight wrapper that manages your Palworld Dedicated Server process on Win
 
 ## Features
 
-- **GUI management interface** — A graphical window with buttons for server control, real-time status display, a unified settings panel, and help documentation. Launches by default.
-- **Auto-start on connect** — The wrapper listens on the game port. When a player tries to join, it launches the server automatically.
-- **Auto-shutdown on idle** — After 5 minutes (configurable) with no players connected, the server shuts down gracefully.
-- **Scheduled maintenance** — Automatically restarts the server at a configurable interval (default 6 hours), broadcasts a warning to players beforehand, and optionally updates the server via SteamCMD.
-- **Player monitoring** — Tracks connected players via RCON polling.
-- **Dual interface modes** — Choose between a GUI (default) or console interface via `--interface gui|console`.
-- **Unified settings panel** — View and modify `PalWorldSettings.ini` values in one place, with descriptions, allowed values, defaults, and type/range validation. Search/filter settings by name or description, and apply changes inline without editing the file by hand (available in both GUI and console modes).
-- **Crash recovery** — If the server process dies unexpectedly, the wrapper resumes monitoring for new connections.
-- **Logging** — Rotating log file with timestamped entries for state changes, player events, and errors. Operational output is additionally shown in the active interface (console stdout or the GUI output panel).
+- **Auto-start on connect** — Listens on the game port and launches the server when a player tries to join.
+- **Auto-shutdown on idle** — Shuts the server down gracefully after a configurable idle timeout (default 5 minutes).
+- **Scheduled maintenance** — Periodically restarts the server with a player warning broadcast, optionally running a SteamCMD update.
+- **GUI interface (default)** — Graphical window with server control buttons, real-time status, unified settings panel, and output log.
+- **Console interface** — Interactive prompt for headless or terminal-based usage.
+- **Unified settings panel** — View and edit `PalWorldSettings.ini` values with descriptions, validation, and search/filter (both interfaces).
+- **Crash recovery** — Resumes monitoring automatically if the server process dies.
+- **Rotating log file** — Timestamped entries for state changes, player events, and errors.
 
 ## Requirements
 
 - Windows
 - Python 3.11+
-- Palworld Dedicated Server installed (via Steam)
-- RCON enabled in your server settings (`RCONEnabled=True`, with a password set)
-- **tkinter** — included in the Python standard library (no additional install needed). Required for the GUI interface.
+- Palworld Dedicated Server installed (via Steam or SteamCMD)
+- RCON enabled in your server settings (`RCONEnabled=True` with `AdminPassword` set)
 
 ## Installation
 
@@ -33,12 +31,12 @@ pip install -e .
 ## Usage
 
 ```bash
-palworld-wrapper --server-exe "C:\SteamLibrary\steamapps\common\PalServer\PalServer.exe" \
-                 --settings-file "C:\SteamLibrary\steamapps\common\PalServer\Pal\Saved\Config\WindowsServer\PalWorldSettings.ini" \
+palworld-wrapper --server-exe "C:\SteamLibrary\steamapps\common\PalServer\PalServer.exe" ^
+                 --settings-file "C:\SteamLibrary\steamapps\common\PalServer\Pal\Saved\Config\WindowsServer\PalWorldSettings.ini" ^
                  --rcon-password "your_rcon_password"
 ```
 
-Or run directly:
+Or run directly without installing:
 
 ```bash
 python -m src.main --server-exe <path> --settings-file <path> --rcon-password <password>
@@ -48,59 +46,40 @@ python -m src.main --server-exe <path> --settings-file <path> --rcon-password <p
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--interface` | `gui` | Interface mode: `gui` (graphical window) or `console` (interactive prompt) |
 | `--server-exe` | *(required)* | Path to `PalServer.exe` |
 | `--settings-file` | *(required)* | Path to `PalWorldSettings.ini` |
 | `--rcon-password` | `""` | RCON admin password |
 | `--rcon-port` | `25575` | RCON TCP port |
 | `--game-port` | `8211` | Game UDP port |
 | `--idle-timeout` | `300` | Seconds with 0 players before auto-shutdown |
+| `--poll-interval` | `10` | Seconds between player count checks (1–30) |
 | `--maintenance-interval` | `21600` | Seconds between maintenance restarts (3600–86400) |
 | `--maintenance-broadcast-lead` | `300` | Seconds before restart to warn players (30–1800) |
 | `--steamcmd-path` | `""` | Path to `steamcmd.exe` (empty = skip updates) |
 | `--steam-app-install-dir` | `""` | Palworld server install directory for SteamCMD |
-| `--poll-interval` | `10` | Seconds between player count checks (1–30) |
+| `--interface` | `gui` | Interface mode: `gui` or `console` |
 | `--log-file` | `wrapper.log` | Log file path |
 
 ## GUI Interface
 
-By default, the wrapper launches a graphical management window (title: "Palworld Server Wrapper", minimum size 800×600).
-
-### GUI Features
+The default mode launches a standalone graphical window. It detaches from the launching console automatically — you can close the PowerShell window without affecting the wrapper or server.
 
 | Section | Description |
 |---------|-------------|
-| **Server Control** | Start, Stop, and Restart buttons. Buttons are enabled/disabled based on the current server state. A loading indicator appears during operations. |
-| **Status Display** | Real-time display of server state, player count, idle timer, server PID, and uptime. Refreshes automatically every 1 second. |
-| **Output Panel** | Scrollable area displaying operational output (state changes, player events, errors) in real time. Replaces the need for a separate console window. |
-| **Server Settings** | Unified panel showing all settings alphabetically with descriptions, allowed values, defaults, and current values. Each setting has an inline Apply button for direct editing with type-aware validation. Search/filter by name or description. Password values are masked. A pending changes indicator shows queued modifications. Changes made while the server is running are queued and applied on restart. |
-| **Help** | Opens a dialog describing all GUI controls and fields. |
-| **Quit** | Gracefully shuts down the server and closes the wrapper (same as closing the window). |
+| **Server Control** | Start, Stop, and Restart buttons (enabled/disabled based on server state) |
+| **Status Display** | Server state, player count, idle timer, PID, and uptime (auto-refreshes) |
+| **Output Panel** | Scrollable real-time log of events and errors |
+| **Server Settings** | Searchable/filterable list of all settings with inline editing and validation |
+| **Help** | Opens a dialog describing all controls |
+| **Quit** | Gracefully stops the server and closes the wrapper |
 
-To use the console interface instead:
+## Console Interface
 
-```bash
-palworld-wrapper --interface console --server-exe <path> --settings-file <path> --rcon-password <password>
-```
-
-### Standalone GUI Behavior
-
-When launched in GUI mode (the default), the wrapper automatically detaches from the PowerShell console that started it. This means:
-
-- **The launching console can be closed.** The GUI window continues running independently — closing PowerShell will not terminate the server or the wrapper.
-- **No console window needs to remain open.** The GUI operates as a standalone application.
-- **All operational output appears in the Output panel** within the GUI window itself (state changes, player events, errors). You do not need a console to monitor the wrapper.
-- **Logs are always written to file.** Regardless of interface mode, all output is logged to the configured log file (`wrapper.log` by default) for debugging.
-
-> **Note:** Console mode (`--interface console`) still requires the console to remain open, as expected — it reads commands from and prints output to the terminal.
-
-## Console Interface (Interactive Commands)
-
-When running with `--interface console`, the wrapper presents a `>` prompt:
+Launch with `--interface console` to use an interactive terminal prompt:
 
 | Command | Description |
 |---------|-------------|
-| `start` | Start the server manually |
+| `start` | Start the server |
 | `stop` | Stop the server gracefully |
 | `restart` | Restart the server |
 | `status` | Show server state, player count, idle timer, uptime |
@@ -111,14 +90,13 @@ When running with `--interface console`, the wrapper presents a `>` prompt:
 
 ## How It Works
 
-1. The wrapper starts in **monitoring mode**, listening for UDP traffic on the game port (retries binding with backoff if the port isn't immediately available).
-2. When a player connects, it releases the port, launches `PalServer.exe`, and waits for the RCON TCP port (25575) to become available — a reliable signal that the server is fully initialized.
-3. While running, it connects to RCON (with retry/backoff if the server is slow to initialize) and polls for player count every few seconds.
-4. When the last player leaves, a 5-minute idle timer starts.
-5. If no one rejoins before the timer expires, the server shuts down and the wrapper resumes monitoring.
-6. On a configurable interval (default 6 hours), the wrapper broadcasts a warning to players, stops the server, runs a SteamCMD update (if configured), and restarts — keeping the server fresh and up-to-date.
+1. The wrapper listens for UDP traffic on the game port.
+2. When a player connects, it releases the port, launches the server, and waits for RCON readiness.
+3. While running, it polls RCON for player count.
+4. When the last player leaves, the idle timer starts. If no one rejoins, the server shuts down and monitoring resumes.
+5. On the maintenance interval, the wrapper broadcasts a warning, stops the server, optionally runs a SteamCMD update, and restarts.
 
-> **Note:** The player whose connection triggers the auto-start will need to reconnect once the server finishes launching (roughly 1–2 minutes). The initial connection packet is consumed by the wrapper to detect intent — it cannot be forwarded to the server.
+> **Note:** The player whose connection triggers auto-start will need to reconnect once the server finishes launching (~1–2 minutes). The initial packet is consumed by the wrapper to detect intent.
 
 ## Development
 
@@ -131,8 +109,7 @@ python -m pytest tests/ -v
 
 | Problem | Solution |
 |---------|----------|
-| Wrapper can't bind to port 8211 | Make sure the Palworld server isn't already running. The wrapper retries with backoff, but check for port conflicts. |
-| Server starts but RCON never connects | Verify `RCONEnabled=True` and `AdminPassword` is set in `PalWorldSettings.ini`. The password must match `--rcon-password`. |
-| Idle timer shuts down too quickly | Increase `--idle-timeout` (e.g., `--idle-timeout 600` for 10 minutes). |
-| Wrapper exits immediately | Check `wrapper.log` for configuration errors. Ensure `--server-exe` and `--settings-file` paths are correct. |
-| Player count stuck after disconnect | RCON may be lagging — the wrapper retries on the next poll interval. If persistent, restart the wrapper. |
+| Can't bind to port 8211 | Ensure the Palworld server isn't already running. Check for port conflicts. |
+| RCON never connects | Verify `RCONEnabled=True` and `AdminPassword` in `PalWorldSettings.ini` matches `--rcon-password`. |
+| Idle timer too aggressive | Increase `--idle-timeout` (e.g., `600` for 10 minutes). |
+| Wrapper exits immediately | Check `wrapper.log` for errors. Verify `--server-exe` and `--settings-file` paths exist. |

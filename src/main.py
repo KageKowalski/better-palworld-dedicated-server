@@ -98,6 +98,30 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="RCON poll interval in seconds (default: 10)",
     )
     parser.add_argument(
+        "--maintenance-interval",
+        type=int,
+        default=21600,
+        help="Seconds between maintenance restarts (default: 21600, range: 3600-86400)",
+    )
+    parser.add_argument(
+        "--maintenance-broadcast-lead",
+        type=int,
+        default=300,
+        help="Seconds before restart to warn players (default: 300, range: 30-1800)",
+    )
+    parser.add_argument(
+        "--steamcmd-path",
+        type=str,
+        default="",
+        help="Path to steamcmd.exe for automatic updates (default: empty, skips updates)",
+    )
+    parser.add_argument(
+        "--steam-app-install-dir",
+        type=str,
+        default="",
+        help="Palworld server install directory for SteamCMD (default: empty)",
+    )
+    parser.add_argument(
         "--log-file",
         type=Path,
         default=Path("wrapper.log"),
@@ -140,6 +164,10 @@ def build_config(args: argparse.Namespace) -> WrapperConfig:
         rcon_password=args.rcon_password,
         idle_timeout_seconds=args.idle_timeout,
         rcon_poll_interval_seconds=args.poll_interval,
+        maintenance_interval_seconds=args.maintenance_interval,
+        maintenance_broadcast_lead_seconds=args.maintenance_broadcast_lead,
+        steamcmd_path=args.steamcmd_path,
+        steam_app_install_dir=args.steam_app_install_dir,
         log_file_path=args.log_file,
     )
     config.validate()
