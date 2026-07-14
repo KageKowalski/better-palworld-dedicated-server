@@ -21,7 +21,7 @@ from src.settings_helpers import (
     get_input_control_type,
     values_differ,
 )
-from src.settings_parser import SETTING_DEFINITIONS, SettingDefinition, SettingsParser
+from src.settings_parser import SETTING_CATEGORIES, SETTING_DEFINITIONS, SettingDefinition, SettingsParser
 from src.settings_write_handler import SettingsWriteHandler
 from src.validation import (
     CorrectionResult,
@@ -156,7 +156,7 @@ class SettingsPanel(ttk.LabelFrame):
         self.filter_settings(current)
 
     def refresh(self) -> None:
-        """Re-read settings file and rebuild all SettingRows."""
+        """Re-read settings file and rebuild all SettingRows grouped by category."""
         settings = SettingsParser.read_settings(self._config.settings_file_path)
 
         # Handle read errors
@@ -170,43 +170,120 @@ class SettingsPanel(ttk.LabelFrame):
         # Compute the union of file keys and definition keys
         all_keys = set(settings.keys()) | set(SETTING_DEFINITIONS.keys())
 
-        # Sort alphabetically, case-insensitive
-        sorted_keys = sorted(all_keys, key=lambda k: k.lower())
-
-        # Destroy existing rows
+        # Destroy existing rows and headers
         for row in self._setting_rows:
             row.destroy()
         self._setting_rows.clear()
+
+        for header in getattr(self, "_category_headers", []):
+            header.destroy()
+        self._category_headers: list[ttk.Label] = []
 
         # Hide "no results" label if present
         if self._no_results_label is not None:
             self._no_results_label.destroy()
             self._no_results_label = None
 
-        # Build new SettingRow widgets
-        for key in sorted_keys:
-            definition = SETTING_DEFINITIONS.get(key)
-            current_value = str(settings.get(key, "")) if key in settings else ""
+        # Group keys by category, then sort alphabetically within each group
+        category_buckets: dict[str, list[str]] = {
+            cat: [] for cat in SETTING_CATEGORIES
+        }
+        uncategorized: list[str] = []
 
-            row = SettingRow(
-                parent=self._inner_frame,
-                key=key,
-                definition=definition,
-                current_value=current_value,
-                on_apply=self._on_apply_setting,
+        for key in all_keys:
+            definition = SETTING_DEFINITIONS.get(key)
+            if definition and definition.category in category_buckets:
+                category_buckets[definition.category].append(key)
+            else:
+                uncategorized.append(key)
+
+        # Sort each bucket alphabetically (case-insensitive)
+        for cat in category_buckets:
+            category_buckets[cat].sort(key=lambda k: k.lower())
+        uncategorized.sort(key=lambda k: k.lower())
+
+        # Build rows in category order with headers
+        for cat in SETTING_CATEGORIES:
+            keys_in_cat = category_buckets[cat]
+            if not keys_in_cat:
+                continue
+
+            # Add category header
+            header = ttk.Label(
+                self._inner_frame,
+                text=cat,
+                font=self._get_header_font(),
+                anchor="w",
             )
-            row.pack(fill="x", padx=2, pady=2)
-            self._setting_rows.append(row)
+            header.pack(fill="x", padx=2, pady=(10, 4))
+            self._category_headers.append(header)
+
+            # Add setting rows for this category
+            for key in keys_in_cat:
+                definition = SETTING_DEFINITIONS.get(key)
+                current_value = (
+                    str(settings.get(key, "")) if key in settings else ""
+                )
+
+                row = SettingRow(
+                    parent=self._inner_frame,
+                    key=key,
+                    definition=definition,
+                    current_value=current_value,
+                    on_apply=self._on_apply_setting,
+                )
+                row.pack(fill="x", padx=2, pady=2)
+                self._setting_rows.append(row)
+
+        # Add uncategorized settings at the end (if any)
+        if uncategorized:
+            header = ttk.Label(
+                self._inner_frame,
+                text="Other",
+                font=self._get_header_font(),
+                anchor="w",
+            )
+            header.pack(fill="x", padx=2, pady=(10, 4))
+            self._category_headers.append(header)
+
+            for key in uncategorized:
+                definition = SETTING_DEFINITIONS.get(key)
+                current_value = (
+                    str(settings.get(key, "")) if key in settings else ""
+                )
+
+                row = SettingRow(
+                    parent=self._inner_frame,
+                    key=key,
+                    definition=definition,
+                    current_value=current_value,
+                    on_apply=self._on_apply_setting,
+                )
+                row.pack(fill="x", padx=2, pady=2)
+                self._setting_rows.append(row)
 
         # Re-apply current search filter
         search_text = self._search_var.get()
         if search_text:
             self.filter_settings(search_text)
 
+    def _get_header_font(self):
+        """Return a bold, slightly larger font for category headers."""
+        try:
+            from tkinter import font as tkfont
+            default_font = tkfont.nametofont("TkDefaultFont")
+            header_font = default_font.copy()
+            header_font.configure(weight="bold", size=default_font.cget("size") + 2)
+            return header_font
+        except Exception:
+            return None
+
     def filter_settings(self, search_text: str) -> None:
         """Show only SettingRows matching the search text.
 
-        Matches case-insensitively against both the key name and description.
+        Matches case-insensitively against the key name, description,
+        and category. Category headers are hidden/shown based on whether
+        they have visible children.
 
         Args:
             search_text: The search query string.
@@ -217,7 +294,9 @@ class SettingsPanel(ttk.LabelFrame):
             self._no_results_label = None
 
         if not search_text:
-            # Show all rows
+            # Show all rows and headers
+            for header in self._category_headers:
+                header.pack(fill="x", padx=2, pady=(10, 4))
             for row in self._setting_rows:
                 row.pack(fill="x", padx=2, pady=2)
             return
@@ -225,14 +304,31 @@ class SettingsPanel(ttk.LabelFrame):
         search_lower = search_text.lower()
         visible_count = 0
 
+        # Track which categories have visible rows
+        visible_categories: set[str] = set()
+
         for row in self._setting_rows:
             key_lower = row.key.lower()
             desc_lower = row.description.lower()
-            if search_lower in key_lower or search_lower in desc_lower:
+            cat_lower = row.category.lower()
+            if (
+                search_lower in key_lower
+                or search_lower in desc_lower
+                or search_lower in cat_lower
+            ):
                 row.pack(fill="x", padx=2, pady=2)
                 visible_count += 1
+                visible_categories.add(row.category)
             else:
                 row.pack_forget()
+
+        # Show/hide category headers based on whether they have visible rows
+        for header in self._category_headers:
+            header_text = header.cget("text")
+            if header_text in visible_categories:
+                header.pack(fill="x", padx=2, pady=(10, 4))
+            else:
+                header.pack_forget()
 
         # Show "No matching settings" if nothing matched
         if visible_count == 0:
@@ -356,6 +452,12 @@ class SettingRow(ttk.Frame):
             self.description = definition.description
         else:
             self.description = "No description available"
+
+        # Derive category for search filtering
+        if definition is not None and definition.category:
+            self.category = definition.category
+        else:
+            self.category = "Other"
 
         self._build_row()
 
