@@ -25,9 +25,9 @@ The wrapper is a **state machine** with four states:
 | `src/process_manager.py` | Subprocess lifecycle (start/stop/crash detection) |
 | `src/rcon_client.py` | RCON queries for player count |
 | `src/idle_timer.py` | Countdown timer that triggers shutdown |
-| `src/settings_parser.py` | PalWorldSettings.ini read/write/validate (handles string quoting on write/read) |
+| `src/settings_parser.py` | PalWorldSettings.ini read/write/validate; `SETTING_DEFINITIONS` dict with all ~119 known server parameters (types, ranges, defaults, categories); `SETTING_CATEGORIES` list for canonical display order; `raw_string` flag controls unquoted write formatting for enum/list values |
 | `src/gui_interface.py` | Tkinter-based GUI management interface — cooperative async scheduling with `root.update()` every ~33ms, widgets as `ttk.LabelFrame` subclasses, includes OutputPanel for log display, SettingsPanel for unified settings view/edit |
-| `src/settings_panel.py` | Unified SettingsPanel (replaces legacy SettingsView + SettingsEditor) — `ttk.LabelFrame` subclass with search/filter, scrollable SettingRow widgets, inline editing via Apply buttons, and pending changes indicator |
+| `src/settings_panel.py` | Unified SettingsPanel — `ttk.LabelFrame` subclass with search/filter, category-grouped display with bold headers (Performances, Server management, Features, Game balances), scrollable SettingRow widgets, inline editing via Apply buttons, and pending changes indicator |
 | `src/settings_helpers.py` | Pure formatting functions for setting metadata display (`format_allowed_values`, `format_default_value`, `format_current_value`, `values_differ`, `get_input_control_type`) |
 | `src/management_interface.py` | Interactive CLI (stdin commands), password masking; delegates validation to `src/validation.py` |
 | `src/validation.py` | Shared input validation and auto-correction logic (`validate_and_correct()`, `CorrectionResult` dataclass, `is_password_setting()`) — used by both GUI and console interfaces |
@@ -53,7 +53,7 @@ The wrapper is a **state machine** with four states:
 11. **Dual-interface architecture** — GUI is the default interface; console is the secondary fallback. Both share the same WrapperCore API and validation logic, differing only in presentation
 12. **Console detachment via launcher** — In GUI mode on Windows, `src/launcher.py` re-spawns the process as a detached child using `pythonw.exe` (or `python.exe` with `CREATE_NO_WINDOW | DETACHED_PROCESS` flags as fallback), then exits. A hidden `--detached` flag prevents infinite re-spawn loops
 13. **Mode-aware logging** — The logger routes operational output to stdout (console mode) or a GUI OutputPanel callback (GUI mode), while always maintaining file logging. GUI mode never writes to stdout/stderr
-14. **Unified settings panel** — The `SettingsPanel` replaces the old separate `SettingsView` (read-only) and `SettingsEditor` (key+value form) with a single scrollable, searchable panel. Each setting row shows description, allowed values, default, and current value inline, with an Apply button for direct modification. `SettingDefinition` includes `description` and `default_value` fields for metadata display
+14. **Unified settings panel** — The `SettingsPanel` replaces the old separate `SettingsView` (read-only) and `SettingsEditor` (key+value form) with a single scrollable, searchable panel. Settings are grouped by category (Performances, Server management, Features, Game balances) with bold headers, sorted alphabetically within each group. Each setting row shows description, allowed values, default, and current value inline, with an Apply button for direct modification. `SettingDefinition` includes `description`, `default_value`, `category`, and `raw_string` fields for metadata display and correct write formatting
 
 ## External Dependencies
 
