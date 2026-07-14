@@ -28,6 +28,8 @@ class SettingDefinition:
         default_value: The server's documented default value (None if unknown).
         category: Grouping category matching official docs (Performances,
             Server management, Features, Game balances).
+        raw_string: If True, string values are written without surrounding quotes.
+            Used for parenthesized list values like CrossplayPlatforms.
     """
 
     name: str
@@ -38,6 +40,7 @@ class SettingDefinition:
     description: str = ""
     default_value: Any = None
     category: str = ""
+    raw_string: bool = False
 
 
 # Canonical category ordering matching the official Palworld Server Guide.
@@ -331,6 +334,7 @@ SETTING_DEFINITIONS: dict[str, SettingDefinition] = {
         description="Items lost on death: None, Item, ItemAndEquipment, or All.",
         default_value="Item",
         category="Game balances",
+        raw_string=True,
     ),
     "BlockRespawnTime": SettingDefinition(
         name="BlockRespawnTime",
@@ -424,6 +428,7 @@ SETTING_DEFINITIONS: dict[str, SettingDefinition] = {
         description="Server difficulty preset.",
         default_value="None",
         category="Game balances",
+        raw_string=True,
     ),
     "SupplyDropSpan": SettingDefinition(
         name="SupplyDropSpan",
@@ -440,6 +445,7 @@ SETTING_DEFINITIONS: dict[str, SettingDefinition] = {
         description="Comma-separated Technology IDs to disable.",
         default_value="",
         category="Game balances",
+        raw_string=True,
     ),
     # --- Features: Boolean toggles ---
     "bEnablePlayerToPlayerDamage": SettingDefinition(
@@ -703,6 +709,7 @@ SETTING_DEFINITIONS: dict[str, SettingDefinition] = {
         description="Pal spawn randomization: None, Region, or All.",
         default_value="None",
         category="Features",
+        raw_string=True,
     ),
     "RandomizerSeed": SettingDefinition(
         name="RandomizerSeed",
@@ -983,6 +990,7 @@ SETTING_DEFINITIONS: dict[str, SettingDefinition] = {
         description="Allowed platforms to connect: (Steam,Xbox,PS5,Mac).",
         default_value="(Steam,Xbox,PS5,Mac)",
         category="Server management",
+        raw_string=True,
     ),
     "bAllowClientMod": SettingDefinition(
         name="bAllowClientMod",
@@ -998,6 +1006,7 @@ SETTING_DEFINITIONS: dict[str, SettingDefinition] = {
         description="Log format: Text or Json.",
         default_value="Text",
         category="Server management",
+        raw_string=True,
     ),
     "bIsShowJoinLeftMessage": SettingDefinition(
         name="bIsShowJoinLeftMessage",
@@ -1435,6 +1444,8 @@ class SettingsParser:
             elif definition.value_type == int:
                 return str(int(value))
             elif definition.value_type == str:
+                if definition.raw_string:
+                    return str(value)
                 return f'"{value}"'
 
         return str(value)
