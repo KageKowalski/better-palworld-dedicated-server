@@ -285,6 +285,9 @@ class SettingsPanel(ttk.LabelFrame):
         and category. Category headers are hidden/shown based on whether
         they have visible children.
 
+        Uses pack_forget + re-pack in correct order to avoid tkinter's
+        pack ordering issue where re-packed widgets append to the end.
+
         Args:
             search_text: The search query string.
         """
@@ -293,12 +296,15 @@ class SettingsPanel(ttk.LabelFrame):
             self._no_results_label.destroy()
             self._no_results_label = None
 
+        # Unpack everything first to reset pack order
+        for header in self._category_headers:
+            header.pack_forget()
+        for row in self._setting_rows:
+            row.pack_forget()
+
         if not search_text:
-            # Show all rows and headers
-            for header in self._category_headers:
-                header.pack(fill="x", padx=2, pady=(10, 4))
-            for row in self._setting_rows:
-                row.pack(fill="x", padx=2, pady=2)
+            # Re-pack all headers and rows in correct interleaved order
+            self._repack_all()
             return
 
         search_lower = search_text.lower()
@@ -316,19 +322,27 @@ class SettingsPanel(ttk.LabelFrame):
                 or search_lower in desc_lower
                 or search_lower in cat_lower
             ):
-                row.pack(fill="x", padx=2, pady=2)
                 visible_count += 1
                 visible_categories.add(row.category)
-            else:
-                row.pack_forget()
 
-        # Show/hide category headers based on whether they have visible rows
+        # Re-pack headers and matching rows in correct order
         for header in self._category_headers:
             header_text = header.cget("text")
             if header_text in visible_categories:
                 header.pack(fill="x", padx=2, pady=(10, 4))
-            else:
-                header.pack_forget()
+                # Pack only matching rows that belong to this category
+                for row in self._setting_rows:
+                    if row.category != header_text:
+                        continue
+                    key_lower = row.key.lower()
+                    desc_lower = row.description.lower()
+                    cat_lower = row.category.lower()
+                    if (
+                        search_lower in key_lower
+                        or search_lower in desc_lower
+                        or search_lower in cat_lower
+                    ):
+                        row.pack(fill="x", padx=2, pady=2)
 
         # Show "No matching settings" if nothing matched
         if visible_count == 0:
@@ -336,6 +350,19 @@ class SettingsPanel(ttk.LabelFrame):
                 self._inner_frame, text="No matching settings"
             )
             self._no_results_label.pack(fill="x", padx=5, pady=10)
+
+    def _repack_all(self) -> None:
+        """Re-pack all category headers and setting rows in correct order.
+
+        Iterates through headers and packs each header followed by its
+        associated rows, preserving the category-grouped display order.
+        """
+        for header in self._category_headers:
+            header_text = header.cget("text")
+            header.pack(fill="x", padx=2, pady=(10, 4))
+            for row in self._setting_rows:
+                if row.category == header_text:
+                    row.pack(fill="x", padx=2, pady=2)
 
     def update_pending_indicator(self) -> None:
         """Update the pending changes badge count."""
