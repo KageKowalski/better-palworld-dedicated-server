@@ -1880,22 +1880,22 @@ class TestHelpDialog:
     tested without a display.
     """
 
-    @patch("src.gui_interface.tk.Toplevel.__init__", return_value=None)
-    @patch("src.gui_interface.tk.Toplevel.title")
-    @patch("src.gui_interface.tk.Toplevel.geometry")
-    @patch("src.gui_interface.tk.Toplevel.resizable")
-    @patch("src.gui_interface.tk.Toplevel.transient")
-    @patch("src.gui_interface.tk.Toplevel.grab_set")
-    @patch("src.gui_interface.tk.Toplevel.focus_set")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.__init__", return_value=None)
+    @patch("src.gui_interface.customtkinter.CTkToplevel.title")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.geometry")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.resizable")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.transient")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.grab_set")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.focus_set")
     def test_window_title(
-        self, mock_focus, mock_grab, mock_transient, mock_resizable,
-        mock_geometry, mock_title, mock_init
+        self, mock_focus, mock_grab, mock_transient,
+        mock_resizable, mock_geometry, mock_title, mock_init
     ):
         """HelpDialog should set title 'Help - Palworld Server Wrapper'."""
         from src.gui_interface import HelpDialog
         mock_parent = MagicMock()
         with patch.object(HelpDialog, "_build_content"):
-            HelpDialog(mock_parent)
+            dialog = HelpDialog(mock_parent)
         mock_title.assert_called_once_with("Help - Palworld Server Wrapper")
 
     def test_help_content_contains_server_control_section(self):
@@ -2454,13 +2454,13 @@ class TestHelpDialogMocked:
         content = HelpDialog.HELP_CONTENT.lower()
         assert "enum" in content
 
-    @patch("src.gui_interface.tk.Toplevel.__init__", return_value=None)
-    @patch("src.gui_interface.tk.Toplevel.title")
-    @patch("src.gui_interface.tk.Toplevel.geometry")
-    @patch("src.gui_interface.tk.Toplevel.resizable")
-    @patch("src.gui_interface.tk.Toplevel.transient")
-    @patch("src.gui_interface.tk.Toplevel.grab_set")
-    @patch("src.gui_interface.tk.Toplevel.focus_set")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.__init__", return_value=None)
+    @patch("src.gui_interface.customtkinter.CTkToplevel.title")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.geometry")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.resizable")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.transient")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.grab_set")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.focus_set")
     def test_init_sets_correct_title(
         self, mock_focus, mock_grab, mock_transient, mock_resizable,
         mock_geometry, mock_title, mock_init
@@ -2475,13 +2475,13 @@ class TestHelpDialogMocked:
 
         mock_title.assert_called_once_with("Help - Palworld Server Wrapper")
 
-    @patch("src.gui_interface.tk.Toplevel.__init__", return_value=None)
-    @patch("src.gui_interface.tk.Toplevel.title")
-    @patch("src.gui_interface.tk.Toplevel.geometry")
-    @patch("src.gui_interface.tk.Toplevel.resizable")
-    @patch("src.gui_interface.tk.Toplevel.transient")
-    @patch("src.gui_interface.tk.Toplevel.grab_set")
-    @patch("src.gui_interface.tk.Toplevel.focus_set")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.__init__", return_value=None)
+    @patch("src.gui_interface.customtkinter.CTkToplevel.title")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.geometry")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.resizable")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.transient")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.grab_set")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.focus_set")
     def test_init_sets_geometry_600x400(
         self, mock_focus, mock_grab, mock_transient, mock_resizable,
         mock_geometry, mock_title, mock_init
@@ -2496,13 +2496,13 @@ class TestHelpDialogMocked:
 
         mock_geometry.assert_called_once_with("600x400")
 
-    @patch("src.gui_interface.tk.Toplevel.__init__", return_value=None)
-    @patch("src.gui_interface.tk.Toplevel.title")
-    @patch("src.gui_interface.tk.Toplevel.geometry")
-    @patch("src.gui_interface.tk.Toplevel.resizable")
-    @patch("src.gui_interface.tk.Toplevel.transient")
-    @patch("src.gui_interface.tk.Toplevel.grab_set")
-    @patch("src.gui_interface.tk.Toplevel.focus_set")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.__init__", return_value=None)
+    @patch("src.gui_interface.customtkinter.CTkToplevel.title")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.geometry")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.resizable")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.transient")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.grab_set")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.focus_set")
     def test_init_sets_transient_to_parent(
         self, mock_focus, mock_grab, mock_transient, mock_resizable,
         mock_geometry, mock_title, mock_init
@@ -2517,13 +2517,13 @@ class TestHelpDialogMocked:
 
         mock_transient.assert_called_once_with(mock_parent)
 
-    @patch("src.gui_interface.tk.Toplevel.__init__", return_value=None)
-    @patch("src.gui_interface.tk.Toplevel.title")
-    @patch("src.gui_interface.tk.Toplevel.geometry")
-    @patch("src.gui_interface.tk.Toplevel.resizable")
-    @patch("src.gui_interface.tk.Toplevel.transient")
-    @patch("src.gui_interface.tk.Toplevel.grab_set")
-    @patch("src.gui_interface.tk.Toplevel.focus_set")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.__init__", return_value=None)
+    @patch("src.gui_interface.customtkinter.CTkToplevel.title")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.geometry")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.resizable")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.transient")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.grab_set")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.focus_set")
     def test_init_calls_grab_set(
         self, mock_focus, mock_grab, mock_transient, mock_resizable,
         mock_geometry, mock_title, mock_init
@@ -2538,13 +2538,13 @@ class TestHelpDialogMocked:
 
         mock_grab.assert_called_once()
 
-    @patch("src.gui_interface.tk.Toplevel.__init__", return_value=None)
-    @patch("src.gui_interface.tk.Toplevel.title")
-    @patch("src.gui_interface.tk.Toplevel.geometry")
-    @patch("src.gui_interface.tk.Toplevel.resizable")
-    @patch("src.gui_interface.tk.Toplevel.transient")
-    @patch("src.gui_interface.tk.Toplevel.grab_set")
-    @patch("src.gui_interface.tk.Toplevel.focus_set")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.__init__", return_value=None)
+    @patch("src.gui_interface.customtkinter.CTkToplevel.title")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.geometry")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.resizable")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.transient")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.grab_set")
+    @patch("src.gui_interface.customtkinter.CTkToplevel.focus_set")
     def test_init_calls_focus_set(
         self, mock_focus, mock_grab, mock_transient, mock_resizable,
         mock_geometry, mock_title, mock_init

@@ -24,6 +24,7 @@ from src.gui_theme import (
     BUTTON_CORNER_RADIUS,
     COLOR_ACCENT,
     COLOR_ALERT,
+    COLOR_BASE_BG,
     COLOR_DISABLED,
     COLOR_INPUT_BG,
     COLOR_PRIMARY,
@@ -937,7 +938,7 @@ class StatusDisplay(customtkinter.CTkFrame):
 
 
 
-class HelpDialog(tk.Toplevel):
+class HelpDialog(customtkinter.CTkToplevel):
     """Modal help dialog with feature documentation.
 
     Displays a scrollable read-only text area containing descriptions of all
@@ -1023,7 +1024,7 @@ to ensure the application does not hang indefinitely.
     def __init__(self, parent: tk.Widget) -> None:
         """Initialize the HelpDialog.
 
-        Creates a Toplevel window with scrollable help text content and a
+        Creates a CTkToplevel window with scrollable help text content and a
         Close button. The dialog is set as transient to the parent and
         grabs focus via grab_set().
 
@@ -1032,6 +1033,7 @@ to ensure the application does not hang indefinitely.
         """
         super().__init__(parent)
 
+        self.configure(fg_color=COLOR_BASE_BG)
         self.title("Help - Palworld Server Wrapper")
         self.geometry("600x400")
         self.resizable(True, True)
@@ -1048,30 +1050,28 @@ to ensure the application does not hang indefinitely.
     def _build_content(self) -> None:
         """Build the scrollable help text content and Close button.
 
-        Creates a read-only Text widget with a vertical scrollbar for the
-        help content, and a Close button at the bottom to dismiss the dialog.
+        Creates a CTkTextbox with built-in scrollbar for the help content,
+        and a Close button at the bottom to dismiss the dialog.
 
         If help content cannot be loaded (resource failure), displays an
         error message instead.
         """
-        # Content frame for the text widget and scrollbar
-        content_frame = ttk.Frame(self)
-        content_frame.pack(fill="both", expand=True, padx=10, pady=(10, 5))
+        # Configure grid layout for the toplevel
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        self.rowconfigure(1, weight=0)
 
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(content_frame)
-        scrollbar.pack(side="right", fill="y")
-
-        # Read-only text widget for help content
-        self._text_widget = tk.Text(
-            content_frame,
+        # CTkTextbox with built-in scrollbar for help content
+        self._text_widget = customtkinter.CTkTextbox(
+            self,
             wrap="word",
-            yscrollcommand=scrollbar.set,
-            padx=10,
-            pady=10,
+            font=FONT_BODY,
+            text_color=COLOR_TEXT,
+            fg_color=COLOR_INPUT_BG,
         )
-        self._text_widget.pack(side="left", fill="both", expand=True)
-        scrollbar.configure(command=self._text_widget.yview)
+        self._text_widget.grid(
+            row=0, column=0, sticky="nsew", padx=10, pady=(10, 5)
+        )
 
         # Insert help content
         try:
@@ -1085,13 +1085,14 @@ to ensure the application does not hang indefinitely.
         self._text_widget.configure(state="disabled")
 
         # Close button at the bottom
-        button_frame = ttk.Frame(self)
-        button_frame.pack(fill="x", padx=10, pady=(5, 10))
-
-        close_button = ttk.Button(
-            button_frame, text="Close", command=self.destroy
+        close_button = customtkinter.CTkButton(
+            self,
+            text="Close",
+            command=self.destroy,
+            fg_color=COLOR_PRIMARY,
+            corner_radius=BUTTON_CORNER_RADIUS,
         )
-        close_button.pack(side="right")
+        close_button.grid(row=1, column=0, sticky="e", padx=10, pady=(5, 10))
 
 
 class SettingsView(ttk.LabelFrame):

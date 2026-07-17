@@ -82,7 +82,27 @@ class _MockCTkScrollableFrame(_MockWidget):
 
 class _MockCTkToplevel(_MockWidget):
     """Fake CTkToplevel."""
-    pass
+
+    def configure(self, **kwargs):
+        pass
+
+    def title(self, *args):
+        pass
+
+    def geometry(self, *args):
+        pass
+
+    def resizable(self, *args):
+        pass
+
+    def transient(self, *args):
+        pass
+
+    def grab_set(self):
+        pass
+
+    def focus_set(self):
+        pass
 
 
 class _MockCTk(_MockWidget):
