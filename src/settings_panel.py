@@ -7,7 +7,6 @@ setting is displayed with full metadata and an inline edit control.
 
 import logging
 import tkinter as tk
-from tkinter import font as tkfont
 from collections.abc import Callable
 from typing import Any
 
