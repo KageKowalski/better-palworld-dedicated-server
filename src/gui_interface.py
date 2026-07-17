@@ -1,9 +1,9 @@
 """GUI Management Interface for the Palworld Server Wrapper.
 
-Provides a tkinter-based graphical interface for interacting with the wrapper.
-Integrates with asyncio via cooperative scheduling (periodic root.update()
-calls from an asyncio coroutine), ensuring neither the tkinter event loop
-nor the asyncio event loop is blocked for more than ~33ms.
+Provides a CustomTkinter-based graphical interface for interacting with the
+wrapper. Integrates with asyncio via cooperative scheduling (periodic
+root.update() calls from an asyncio coroutine), ensuring neither the GUI
+event loop nor the asyncio event loop is blocked for more than ~33ms.
 
 This module mirrors the role of ManagementInterface but with a graphical
 window instead of a CLI prompt.
@@ -13,7 +13,6 @@ import asyncio
 import logging
 import sys
 import tkinter as tk
-from tkinter import ttk
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -22,6 +21,8 @@ import customtkinter
 from src.config import WrapperConfig
 from src.gui_theme import (
     BUTTON_CORNER_RADIUS,
+    CARD_INNER_PADDING,
+    CARD_OUTER_MARGIN,
     COLOR_ACCENT,
     COLOR_ALERT,
     COLOR_BASE_BG,
@@ -35,13 +36,12 @@ from src.gui_theme import (
     FONT_MONO,
     FONT_SUBHEADING,
     WIDGET_INNER_SPACING,
+    create_card_frame,
 )
 from src.models import ServerState, WrapperStatus
 from src.pending_settings import ApplyResult
 from src.settings_panel import SettingsPanel
-from src.settings_parser import SettingsParser
 from src.settings_write_handler import SettingsWriteHandler
-from src.validation import CorrectionResult, PASSWORD_MASK, is_password_setting, validate_and_correct
 from src.wrapper_core import WrapperCore
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ class GuiState:
 
 
 class GuiInterface:
-    """tkinter-based GUI management interface for the Palworld Server Wrapper.
+    """CustomTkinter-based GUI management interface for the Palworld Server Wrapper.
 
     Integrates with asyncio via cooperative scheduling (periodic root.update()
     calls from an asyncio coroutine). The run() method is an async coroutine
@@ -76,15 +76,16 @@ class GuiInterface:
     def __init__(self, wrapper_core: WrapperCore, config: WrapperConfig) -> None:
         """Initialize the GUI interface.
 
-        Creates the tkinter root window with title "Palworld Server Wrapper"
-        and minimum size 800x600. Wires WM_DELETE_WINDOW to _shutdown().
+        Creates the customtkinter CTk root window with appearance mode "dark",
+        color theme "blue", title "Palworld Server Wrapper", and minimum size
+        800x600. Wires WM_DELETE_WINDOW to _shutdown().
 
         Args:
             wrapper_core: The WrapperCore instance for command execution.
             config: The wrapper configuration.
 
         Raises:
-            SystemExit: If tkinter cannot initialize (no display environment).
+            SystemExit: If customtkinter cannot initialize (no display environment).
         """
         self._wrapper_core = wrapper_core
         self._config = config
@@ -99,40 +100,51 @@ class GuiInterface:
         self._notification_state = NotificationState()
 
         try:
-            self._root = tk.Tk()
+            customtkinter.set_appearance_mode("dark")
+            customtkinter.set_default_color_theme("blue")
+            self._root = customtkinter.CTk()
             self._root.title("Palworld Server Wrapper")
             self._root.minsize(800, 600)
             self._root.protocol("WM_DELETE_WINDOW", self._on_close_request)
-        except tk.TclError as e:
+        except Exception as e:
             logger.error("Failed to initialize GUI: %s", e)
             sys.exit(1)
 
         self._build_ui()
 
     def _build_ui(self) -> None:
-        """Construct the complete GUI layout.
+        """Construct the complete GUI layout using grid geometry manager.
 
-        Instantiates and arranges all GUI components in a vertical layout using
-        pack(). Components are grouped with labeled frames (ttk.LabelFrame) for
-        visual separation per Requirement 2.2.
+        Instantiates and arranges all GUI components in a vertical grid layout
+        with Card_Frame containers for visual grouping per Requirements 2.1-2.6
+        and 4.4-4.5.
 
-        Layout order (top to bottom):
-        1. ControlPanel - Server control buttons (Start/Stop/Restart)
-        2. StatusDisplay - Real-time server status fields
-        3. OutputPanel - Operational log output
-        4. SettingsPanel - Unified settings display and modification
-        5. Button frame - Help and Quit buttons
-        6. NotificationBar - Success/error notification display (bottom)
-
-        Note: NotificationBar is instantiated before SettingsPanel (since the
-        panel uses it for notifications) but packed at the bottom of the layout.
+        Grid layout (top to bottom):
+        - Row 0: ControlPanel Card_Frame (weight=0, fixed)
+        - Row 1: StatusDisplay Card_Frame (weight=0, fixed)
+        - Row 2: OutputPanel Card_Frame (weight=1, expand)
+        - Row 3: SettingsPanel Card_Frame (weight=1, expand)
+        - Row 4: Button frame - Help and Quit (weight=0, fixed)
+        - Row 5: NotificationBar Card_Frame (weight=0, fixed)
 
         All widget instances are stored as self._ attributes so
         _disable_all_controls() and other methods can access them.
         """
-        # 1. Control Panel - Server lifecycle buttons
+        # Configure root grid weights
+        self._root.columnconfigure(0, weight=1)
+        self._root.rowconfigure(0, weight=0)  # ControlPanel
+        self._root.rowconfigure(1, weight=0)  # StatusDisplay
+        self._root.rowconfigure(2, weight=1)  # OutputPanel (expand)
+        self._root.rowconfigure(3, weight=1)  # SettingsPanel (expand)
+        self._root.rowconfigure(4, weight=0)  # Button frame
+        self._root.rowconfigure(5, weight=0)  # NotificationBar
+
+        # Row 0: Control Panel - Server lifecycle buttons
+        cp_card = create_card_frame(self._root)
+        cp_card.grid(row=0, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=(CARD_OUTER_MARGIN, CARD_OUTER_MARGIN // 2))
+        cp_card.columnconfigure(0, weight=1)
         self._control_panel = ControlPanel(
-            self._root,
+            cp_card,
             on_start=lambda: asyncio.create_task(
                 self._execute_server_operation("start")
             ),
@@ -143,52 +155,68 @@ class GuiInterface:
                 self._execute_server_operation("restart")
             ),
         )
-        self._control_panel.pack(fill="x", padx=10, pady=(10, 5))
+        self._control_panel.grid(row=0, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
-        # 2. Status Display - Real-time status fields
+        # Row 1: Status Display - Real-time status fields
+        sd_card = create_card_frame(self._root)
+        sd_card.grid(row=1, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
+        sd_card.columnconfigure(0, weight=1)
         self._status_display = StatusDisplay(
-            self._root,
+            sd_card,
             idle_timeout_threshold=self._config.idle_timeout_seconds,
         )
-        self._status_display.pack(fill="x", padx=10, pady=5)
+        self._status_display.grid(row=0, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
-        # 3. Output Panel - Operational log output
-        self._output_panel = OutputPanel(self._root)
-        self._output_panel.pack(fill="both", expand=True, padx=10, pady=5)
+        # Row 2: Output Panel - Operational log output
+        op_card = create_card_frame(self._root)
+        op_card.grid(row=2, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
+        op_card.columnconfigure(0, weight=1)
+        op_card.rowconfigure(0, weight=1)
+        self._output_panel = OutputPanel(op_card)
+        self._output_panel.grid(row=0, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
-        # NotificationBar created early (SettingsPanel needs it), packed at the bottom later
-        self._notification_bar = NotificationBar(self._root)
+        # NotificationBar created early (SettingsPanel needs it), placed at row 5 later
+        nb_card = create_card_frame(self._root)
+        nb_card.grid(row=5, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=(CARD_OUTER_MARGIN // 2, CARD_OUTER_MARGIN))
+        nb_card.columnconfigure(0, weight=1)
+        self._notification_bar = NotificationBar(nb_card)
+        self._notification_bar.grid(row=0, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
-        # 4. SettingsPanel - Unified settings display and modification
+        # Row 3: SettingsPanel - Unified settings display and modification
+        sp_card = create_card_frame(self._root)
+        sp_card.grid(row=3, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
+        sp_card.columnconfigure(0, weight=1)
+        sp_card.rowconfigure(0, weight=1)
         self._settings_panel = SettingsPanel(
-            parent=self._root,
+            parent=sp_card,
             config=self._config,
             wrapper_core=self._wrapper_core,
             settings_write_handler=self._settings_write_handler,
             notification_bar=self._notification_bar,
         )
-        self._settings_panel.pack(fill="both", expand=True, padx=10, pady=5)
+        self._settings_panel.grid(row=0, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
-        # 5. Button frame - Help and Quit buttons
-        button_frame = ttk.Frame(self._root)
-        button_frame.pack(fill="x", padx=10, pady=5)
+        # Row 4: Button frame - Help and Quit buttons
+        button_frame = customtkinter.CTkFrame(self._root, fg_color="transparent")
+        button_frame.grid(row=4, column=0, sticky="ew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
 
-        self._help_button = ttk.Button(
+        self._help_button = customtkinter.CTkButton(
             button_frame,
             text="Help",
+            fg_color=COLOR_PRIMARY,
+            corner_radius=BUTTON_CORNER_RADIUS,
             command=lambda: HelpDialog(self._root),
         )
-        self._help_button.pack(side="left")
+        self._help_button.grid(row=0, column=0, padx=(0, WIDGET_INNER_SPACING))
 
-        self._quit_button = ttk.Button(
+        self._quit_button = customtkinter.CTkButton(
             button_frame,
             text="Quit",
+            fg_color=COLOR_PRIMARY,
+            corner_radius=BUTTON_CORNER_RADIUS,
             command=self._on_close_request,
         )
-        self._quit_button.pack(side="right")
-
-        # 6. NotificationBar is already instantiated above; its pack() is
-        # handled by its own show_success/show_error methods (starts hidden)
+        self._quit_button.grid(row=0, column=1)
 
     def _schedule_status_refresh(self) -> None:
         """Schedule periodic status display updates (every 1 second).
@@ -407,13 +435,11 @@ class GuiInterface:
         """Disable all interactive controls during shutdown.
 
         Iterates through known widget attributes and disables them.
-        Uses hasattr() checks since widgets may not exist yet (e.g., if
-        _build_ui() hasn't been fully wired in task 8.1).
+        Uses hasattr() checks since widgets may not exist yet.
 
         Disables:
         - ControlPanel buttons (Start, Stop, Restart)
-        - SettingsEditor Apply button
-        - SettingsView Refresh button
+        - SettingsPanel Refresh button
         - Quit button
         - Help button
         """
@@ -1093,397 +1119,3 @@ to ensure the application does not hang indefinitely.
             corner_radius=BUTTON_CORNER_RADIUS,
         )
         close_button.grid(row=1, column=0, sticky="e", padx=10, pady=(5, 10))
-
-
-class SettingsView(ttk.LabelFrame):
-    """Read-only display of all server settings with password masking.
-
-    Displays settings from PalWorldSettings.ini sorted alphabetically by key
-    in "Key = Value" format. Password-containing keys have their values masked
-    with "********". Provides a Refresh button to re-read the settings file.
-
-    Handles error conditions:
-    - If SettingsParser returns a dict with "__error__" key, displays only
-      the error message (no setting rows).
-    - If SettingsParser returns an empty dict, displays an informational
-      message indicating no settings were found.
-    """
-
-    def __init__(self, parent: tk.Widget, config: WrapperConfig) -> None:
-        """Initialize the SettingsView.
-
-        Args:
-            parent: The parent tkinter widget.
-            config: The wrapper configuration (provides settings_file_path).
-        """
-        super().__init__(parent, text="Server Settings")
-
-        self._config = config
-
-        # Content frame holds the text widget and scrollbar
-        content_frame = ttk.Frame(self)
-        content_frame.pack(fill="both", expand=True, padx=5, pady=5)
-
-        # Scrollbar for the text widget
-        scrollbar = ttk.Scrollbar(content_frame)
-        scrollbar.pack(side="right", fill="y")
-
-        # Read-only text widget for displaying settings
-        self._text_widget = tk.Text(
-            content_frame,
-            wrap="none",
-            state="disabled",
-            yscrollcommand=scrollbar.set,
-            height=10,
-        )
-        self._text_widget.pack(side="left", fill="both", expand=True)
-        scrollbar.configure(command=self._text_widget.yview)
-
-        # Refresh button at the bottom
-        self._refresh_button = ttk.Button(
-            self, text="Refresh", command=self.refresh
-        )
-        self._refresh_button.pack(anchor="e", padx=5, pady=(0, 5))
-
-        # Populate initial data
-        self.refresh()
-
-    def refresh(self) -> None:
-        """Re-read settings from file and update the display.
-
-        Uses SettingsParser.read_settings() with the configured settings file
-        path. Handles error and empty-dict cases appropriately.
-        """
-        settings = SettingsParser.read_settings(self._config.settings_file_path)
-        self._display_settings(settings)
-
-    def _display_settings(self, settings: dict) -> None:
-        """Render settings in the text widget.
-
-        Args:
-            settings: Dictionary of settings from SettingsParser.read_settings().
-                      May contain "__error__" key for error conditions, or be
-                      empty for the no-settings-found case.
-        """
-        self._text_widget.configure(state="normal")
-        self._text_widget.delete("1.0", "end")
-
-        if "__error__" in settings:
-            # Display only the error message, no setting rows
-            self._text_widget.insert("1.0", settings["__error__"])
-        elif not settings:
-            # Empty dict: no settings found
-            self._text_widget.insert(
-                "1.0", "No settings found in configuration file."
-            )
-        else:
-            # Sort alphabetically by key and display
-            lines = []
-            for key in sorted(settings.keys()):
-                if is_password_setting(key):
-                    lines.append(f"{key} = {PASSWORD_MASK}")
-                else:
-                    lines.append(f"{key} = {settings[key]}")
-            self._text_widget.insert("1.0", "\n".join(lines))
-
-        self._text_widget.configure(state="disabled")
-
-
-
-
-class SettingsEditor(ttk.LabelFrame):
-    """Setting modification with type validation and auto-correction feedback.
-
-    Provides input fields for specifying a setting key and value, validates
-    using the shared validation logic from src/validation.py, displays
-    auto-correction feedback when applicable, and writes the setting to
-    PalWorldSettings.ini via SettingsParser.
-
-    Unknown keys (not in SETTING_DEFINITIONS) are written as raw strings
-    without type validation per Requirement 6.9.
-
-    On success: shows confirmation, triggers on_setting_changed callback
-    (to refresh SettingsView), and warns if server is RUNNING.
-    """
-
-    MAX_KEY_LENGTH = 128
-    MAX_VALUE_LENGTH = 1024
-
-    def __init__(
-        self,
-        parent: tk.Widget,
-        config: WrapperConfig,
-        wrapper_core: WrapperCore,
-        on_setting_changed: Callable[[], None],
-        settings_write_handler: "SettingsWriteHandler | None" = None,
-    ) -> None:
-        """Initialize the SettingsEditor.
-
-        Args:
-            parent: The parent tkinter widget.
-            config: The wrapper configuration (provides settings_file_path).
-            wrapper_core: The WrapperCore instance (for checking server state).
-            on_setting_changed: Callback invoked (no arguments) after a setting
-                is successfully written, used to refresh SettingsView.
-            settings_write_handler: Optional SettingsWriteHandler for routing writes.
-        """
-        super().__init__(parent, text="Modify Setting")
-
-        self._config = config
-        self._wrapper_core = wrapper_core
-        self._on_setting_changed = on_setting_changed
-        self._settings_write_handler = settings_write_handler
-
-        # Input fields frame
-        input_frame = ttk.Frame(self)
-        input_frame.pack(fill="x", padx=5, pady=5)
-
-        # Key input field
-        ttk.Label(input_frame, text="Key:").pack(side="left", padx=(0, 5))
-        self._key_var = tk.StringVar()
-        self._key_var.trace_add("write", self._limit_key_length)
-        self._key_entry = ttk.Entry(input_frame, textvariable=self._key_var, width=30)
-        self._key_entry.pack(side="left", padx=(0, 10))
-
-        # Value input field
-        ttk.Label(input_frame, text="Value:").pack(side="left", padx=(0, 5))
-        self._value_var = tk.StringVar()
-        self._value_var.trace_add("write", self._limit_value_length)
-        self._value_entry = ttk.Entry(
-            input_frame, textvariable=self._value_var, width=30
-        )
-        self._value_entry.pack(side="left", padx=(0, 10))
-
-        # Apply button
-        self._apply_button = ttk.Button(
-            input_frame, text="Apply", command=self._on_submit
-        )
-        self._apply_button.pack(side="left")
-
-        # Feedback label (shows messages below the inputs)
-        self._feedback_label = ttk.Label(self, text="", wraplength=700)
-        self._feedback_label.pack(fill="x", padx=5, pady=(0, 5))
-
-        # Pending indicator label (shows pending count when queue is non-empty in unsafe state)
-        self._pending_indicator = ttk.Label(self, text="", foreground="orange")
-        self._pending_indicator.pack(fill="x", padx=5, pady=(0, 5))
-        self._pending_indicator.pack_forget()  # Hidden initially
-
-    def _limit_key_length(self, *args) -> None:
-        """Limit key entry to MAX_KEY_LENGTH characters via StringVar trace."""
-        current = self._key_var.get()
-        if len(current) > self.MAX_KEY_LENGTH:
-            self._key_var.set(current[: self.MAX_KEY_LENGTH])
-
-    def _limit_value_length(self, *args) -> None:
-        """Limit value entry to MAX_VALUE_LENGTH characters via StringVar trace."""
-        current = self._value_var.get()
-        if len(current) > self.MAX_VALUE_LENGTH:
-            self._value_var.set(current[: self.MAX_VALUE_LENGTH])
-
-    def _on_submit(self) -> None:
-        """Handle the Apply button click.
-
-        Routes through SettingsWriteHandler when available (with fallback to
-        original direct-write code if None).
-
-        Workflow with SettingsWriteHandler:
-        1. Get key and value from entry fields
-        2. Validate key is non-empty
-        3. Call validate_and_correct(key, value) for user-facing auto-correction
-        4. If validation error, show in feedback label (red)
-        5. If CorrectionResult, submit via SettingsWriteHandler.submit()
-        6. Display appropriate message based on whether the setting was queued or written directly
-
-        Fallback (no handler): original validation + direct write behavior.
-        """
-        key = self._key_var.get().strip()
-        value = self._value_var.get()
-
-        # Validate key is non-empty
-        if not key:
-            self._show_feedback("Error: Setting key cannot be empty.", is_error=True)
-            return
-
-        # Validate and auto-correct using shared validation logic
-        result = validate_and_correct(key, value)
-
-        # If result is a string, it's an error message
-        if isinstance(result, str):
-            self._show_feedback(result, is_error=True)
-            return
-
-        # If no settings_write_handler, fall back to original behavior
-        if self._settings_write_handler is None:
-            # Show auto-correction feedback if applicable
-            if result.was_corrected:
-                correction_msg = (
-                    f"Auto-corrected: '{result.original_input}' \u2192 '{result.value}'"
-                )
-                self._show_feedback(correction_msg, is_error=False, is_info=True)
-
-            # Write the setting to file directly
-            try:
-                write_result = SettingsParser.write_setting(
-                    self._config.settings_file_path, key, result.value
-                )
-            except Exception as e:
-                self._show_feedback(
-                    f"Error: File system error: {e}", is_error=True
-                )
-                return
-
-            if not write_result.valid:
-                error_msg = write_result.error_message or "Unknown write error."
-                self._show_feedback(f"Error: {error_msg}", is_error=True)
-                return
-
-            confirmation = f"Setting '{key}' set to '{result.value}' successfully."
-
-            try:
-                status = self._wrapper_core.get_status()
-                if status.server_state == ServerState.RUNNING:
-                    confirmation += (
-                        " Warning: Server is running. A restart is required "
-                        "for this change to take effect."
-                    )
-            except Exception:
-                pass
-
-            if result.was_corrected:
-                correction_msg = (
-                    f"Auto-corrected: '{result.original_input}' \u2192 '{result.value}'. "
-                )
-                self._show_feedback(correction_msg + confirmation, is_error=False, is_info=True)
-            else:
-                self._show_feedback(confirmation, is_error=False)
-
-            try:
-                self._on_setting_changed()
-            except Exception as e:
-                logger.error("Error in on_setting_changed callback: %s", e)
-            return
-
-        # Use SettingsWriteHandler for routing
-        validation_result, was_queued = self._settings_write_handler.submit(key, result.value)
-
-        if not validation_result.valid:
-            error_msg = validation_result.error_message or "Unknown error."
-            self._show_feedback(f"Error: {error_msg}", is_error=True)
-            return
-
-        if was_queued:
-            # Setting was queued (server is in unsafe state)
-            msg = f"Setting '{key}' queued as '{result.value}'. Will apply on server stop/restart."
-            if result.was_corrected:
-                correction_msg = (
-                    f"Auto-corrected: '{result.original_input}' \u2192 '{result.value}'. "
-                )
-                self._show_feedback(correction_msg + msg, is_error=False, is_info=True)
-            else:
-                self._show_feedback(msg, is_error=False, is_info=True)
-        else:
-            # Setting was written directly (server is in safe state)
-            confirmation = f"Setting '{key}' set to '{result.value}' successfully."
-            if result.was_corrected:
-                correction_msg = (
-                    f"Auto-corrected: '{result.original_input}' \u2192 '{result.value}'. "
-                )
-                self._show_feedback(correction_msg + confirmation, is_error=False, is_info=True)
-            else:
-                self._show_feedback(confirmation, is_error=False)
-
-        # Update pending indicator
-        self.update_pending_indicator()
-
-        # Trigger SettingsView refresh via the callback
-        try:
-            self._on_setting_changed()
-        except Exception as e:
-            logger.error("Error in on_setting_changed callback: %s", e)
-
-    def _show_feedback(
-        self, message: str, is_error: bool = False, is_info: bool = False
-    ) -> None:
-        """Display a feedback message in the feedback label.
-
-        Args:
-            message: The message to display.
-            is_error: If True, display in red color.
-            is_info: If True, display in blue/info color (for auto-correction).
-        """
-        if is_error:
-            self._feedback_label.configure(text=message, foreground="red")
-        elif is_info:
-            self._feedback_label.configure(text=message, foreground="blue")
-        else:
-            self._feedback_label.configure(text=message, foreground="green")
-
-    def update_pending_indicator(self) -> None:
-        """Update the pending indicator label based on queue state and server state.
-
-        Shows "N change(s) pending" when the pending queue is non-empty and
-        the server is in an unsafe state. Hides the indicator otherwise.
-        Also binds tooltip events for viewing pending entries.
-        """
-        if self._settings_write_handler is None:
-            return
-
-        try:
-            pending_queue = self._settings_write_handler._pending_queue
-            state = self._wrapper_core.get_status().server_state
-            count = pending_queue.count()
-
-            if count > 0 and state not in SettingsWriteHandler.SAFE_STATES:
-                text = f"{count} change(s) pending"
-                self._pending_indicator.configure(text=text)
-                self._pending_indicator.pack(fill="x", padx=5, pady=(0, 5))
-                # Bind tooltip events
-                self._pending_indicator.bind("<Enter>", self._show_pending_tooltip)
-                self._pending_indicator.bind("<Leave>", self._hide_pending_tooltip)
-            else:
-                self._pending_indicator.pack_forget()
-                self._pending_indicator.configure(text="")
-        except Exception as e:
-            logger.error("Error updating pending indicator: %s", e)
-
-    def _show_pending_tooltip(self, event: "tk.Event") -> None:
-        """Show tooltip with pending entries when hovering over the indicator."""
-        if self._settings_write_handler is None:
-            return
-
-        try:
-            pending_queue = self._settings_write_handler._pending_queue
-            entries = pending_queue.entries()
-            if not entries:
-                return
-
-            # Create tooltip window
-            self._tooltip = tk.Toplevel(self)
-            self._tooltip.wm_overrideredirect(True)
-            self._tooltip.wm_geometry(f"+{event.x_root + 10}+{event.y_root + 10}")
-
-            # Build tooltip content
-            lines = [f"{key} = {value}" for key, value in entries]
-            tooltip_text = "\n".join(lines)
-
-            label = ttk.Label(
-                self._tooltip,
-                text=tooltip_text,
-                background="#ffffe0",
-                relief="solid",
-                borderwidth=1,
-                padding=5,
-            )
-            label.pack()
-        except Exception:
-            pass
-
-    def _hide_pending_tooltip(self, event: "tk.Event") -> None:
-        """Hide the pending entries tooltip."""
-        if hasattr(self, "_tooltip") and self._tooltip is not None:
-            try:
-                self._tooltip.destroy()
-            except Exception:
-                pass
-            self._tooltip = None

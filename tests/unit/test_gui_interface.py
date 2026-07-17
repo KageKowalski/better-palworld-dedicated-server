@@ -83,15 +83,17 @@ class TestNotificationState:
         assert state.dismiss_after_id == "after#1"
 
 
+@patch("src.gui_interface.customtkinter.set_default_color_theme")
+@patch("src.gui_interface.customtkinter.set_appearance_mode")
 @patch.object(GuiInterface, '_build_ui')
 class TestGuiInterfaceInit:
     """Tests for GuiInterface.__init__()."""
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_creates_root_window_with_correct_title(
-        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
+        self, mock_tk_class, mock_build_ui, mock_set_appearance, mock_set_theme, mock_wrapper_core, config
     ):
-        """__init__ should create a Tk root with title 'Palworld Server Wrapper'."""
+        """__init__ should create a CTk root with title 'Palworld Server Wrapper'."""
         mock_root = MagicMock()
         mock_tk_class.return_value = mock_root
 
@@ -100,9 +102,9 @@ class TestGuiInterfaceInit:
         mock_tk_class.assert_called_once()
         mock_root.title.assert_called_once_with("Palworld Server Wrapper")
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_sets_minimum_window_size_800x600(
-        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
+        self, mock_tk_class, mock_build_ui, mock_set_appearance, mock_set_theme, mock_wrapper_core, config
     ):
         """__init__ should set the minimum window size to 800x600."""
         mock_root = MagicMock()
@@ -112,9 +114,9 @@ class TestGuiInterfaceInit:
 
         mock_root.minsize.assert_called_once_with(800, 600)
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_wires_wm_delete_window_protocol(
-        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
+        self, mock_tk_class, mock_build_ui, mock_set_appearance, mock_set_theme, mock_wrapper_core, config
     ):
         """__init__ should wire WM_DELETE_WINDOW to the close handler."""
         mock_root = MagicMock()
@@ -126,11 +128,11 @@ class TestGuiInterfaceInit:
             "WM_DELETE_WINDOW", gui._on_close_request
         )
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_tcl_error_causes_sys_exit(
-        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
+        self, mock_tk_class, mock_build_ui, mock_set_appearance, mock_set_theme, mock_wrapper_core, config
     ):
-        """__init__ should call sys.exit(1) when TclError is raised."""
+        """__init__ should call sys.exit(1) when CTk initialization fails."""
         import tkinter as tk
 
         mock_tk_class.side_effect = tk.TclError("no display name")
@@ -140,11 +142,11 @@ class TestGuiInterfaceInit:
 
         assert exc_info.value.code == 1
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_tcl_error_logs_error(
-        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config, caplog
+        self, mock_tk_class, mock_build_ui, mock_set_appearance, mock_set_theme, mock_wrapper_core, config, caplog
     ):
-        """__init__ should log an error when TclError occurs."""
+        """__init__ should log an error when initialization fails."""
         import logging
         import tkinter as tk
 
@@ -156,9 +158,9 @@ class TestGuiInterfaceInit:
 
         assert "Failed to initialize GUI" in caplog.text
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_initializes_gui_state(
-        self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
+        self, mock_tk_class, mock_build_ui, mock_set_appearance, mock_set_theme, mock_wrapper_core, config
     ):
         """__init__ should initialize internal GUI state."""
         mock_root = MagicMock()
@@ -175,7 +177,7 @@ class TestGuiInterfaceInit:
 class TestGuiInterfaceRun:
     """Tests for GuiInterface.run() async cooperative loop."""
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_run_sets_running_flag(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -198,7 +200,7 @@ class TestGuiInterfaceRun:
         # _running should have been set to True initially
         # (loop exited via TclError break)
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_run_breaks_on_tcl_error(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -217,7 +219,7 @@ class TestGuiInterfaceRun:
         # Should complete without raising any exception
         mock_root.update.assert_called_once()
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_run_calls_update_periodically(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -247,7 +249,7 @@ class TestGuiInterfaceRun:
 class TestGuiInterfaceShutdown:
     """Tests for GuiInterface._shutdown()."""
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_calls_wrapper_quit(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -260,7 +262,7 @@ class TestGuiInterfaceShutdown:
 
         mock_wrapper_core.quit.assert_called_once()
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_destroys_window(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -273,7 +275,7 @@ class TestGuiInterfaceShutdown:
 
         mock_root.destroy.assert_called_once()
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_sets_running_false(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -287,7 +289,7 @@ class TestGuiInterfaceShutdown:
 
         assert gui._running is False
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_handles_timeout(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config, caplog
     ):
@@ -320,7 +322,7 @@ class TestGuiInterfaceShutdown:
         assert "timed out" in caplog.text.lower() or "force-clos" in caplog.text.lower()
         mock_root.destroy.assert_called_once()
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_handles_exception(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config, caplog
     ):
@@ -341,7 +343,7 @@ class TestGuiInterfaceShutdown:
         mock_root.destroy.assert_called_once()
         assert gui._running is False
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_idempotent(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -358,7 +360,7 @@ class TestGuiInterfaceShutdown:
         # quit() should only be called once
         mock_wrapper_core.quit.assert_called_once()
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_handles_window_already_destroyed(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -393,7 +395,7 @@ class TestShutdownControls:
     - _shutdown() calls _disable_all_controls() before quit (Req 8.4)
     """
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_disable_all_controls_disables_control_panel(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -408,7 +410,7 @@ class TestShutdownControls:
 
         gui._control_panel.set_loading.assert_called_once_with(True)
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_disable_all_controls_disables_settings_panel_refresh_button(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -426,7 +428,7 @@ class TestShutdownControls:
             state="disabled"
         )
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_disable_all_controls_disables_quit_button(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -441,7 +443,7 @@ class TestShutdownControls:
 
         gui._quit_button.configure.assert_called_once_with(state="disabled")
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_disable_all_controls_disables_help_button(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -456,7 +458,7 @@ class TestShutdownControls:
 
         gui._help_button.configure.assert_called_once_with(state="disabled")
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_disable_all_controls_handles_missing_widgets(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -468,7 +470,7 @@ class TestShutdownControls:
         # No widgets set - should not raise
         gui._disable_all_controls()
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_disable_all_controls_handles_tcl_error(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -487,7 +489,7 @@ class TestShutdownControls:
         # Should not raise despite TclError
         gui._disable_all_controls()
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_show_shutdown_status_shows_shutting_down_message(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -502,7 +504,7 @@ class TestShutdownControls:
 
         gui._notification_bar.show_error.assert_called_once_with("Shutting down...")
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_show_shutdown_status_handles_missing_notification_bar(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -514,7 +516,7 @@ class TestShutdownControls:
         # No _notification_bar attribute set - should not raise
         gui._show_shutdown_status()
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_shows_shutdown_status(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -529,7 +531,7 @@ class TestShutdownControls:
 
         gui._notification_bar.show_error.assert_called_once_with("Shutting down...")
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_disables_controls_before_quit(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -554,7 +556,7 @@ class TestShutdownControls:
 
         assert call_order == ["disable_controls", "quit"]
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_disables_quit_button(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -569,7 +571,7 @@ class TestShutdownControls:
 
         gui._quit_button.configure.assert_called_once_with(state="disabled")
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_disable_all_controls_with_none_widgets(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -598,7 +600,7 @@ class TestGracefulShutdownDetachedProcess:
     - Requirement 5.5: MONITORING state skips server stop, completes quickly
     """
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_full_sequence_order(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -637,7 +639,7 @@ class TestGracefulShutdownDetachedProcess:
         assert call_order.index("show_status") < call_order.index("quit")
         assert call_order.index("quit") < call_order.index("destroy")
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_with_30s_timeout_on_quit(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -664,7 +666,7 @@ class TestGracefulShutdownDetachedProcess:
 
         assert captured_timeout == 30.0
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_sets_running_false_and_exits_loop(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -682,7 +684,7 @@ class TestGracefulShutdownDetachedProcess:
 
         assert gui._running is False
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_monitoring_state_skips_server_stop(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -723,7 +725,7 @@ class TestGracefulShutdownDetachedProcess:
         # stop_server should NOT have been called since server is not running
         real_core._process_manager.stop_server.assert_not_called()
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_monitoring_state_completes_quickly(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -757,7 +759,7 @@ class TestGracefulShutdownDetachedProcess:
         except asyncio.TimeoutError:
             pytest.fail("Shutdown in MONITORING state did not complete within 5 seconds")
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_running_state_calls_process_tree_termination(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -799,7 +801,7 @@ class TestGracefulShutdownDetachedProcess:
             timeout=real_config.stop_timeout_seconds
         )
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_prevents_double_execution(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -826,7 +828,7 @@ class TestGracefulShutdownDetachedProcess:
 
         assert quit_call_count == 1
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_disables_all_interactive_controls(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -855,7 +857,7 @@ class TestGracefulShutdownDetachedProcess:
         # Help button should be disabled
         gui._help_button.configure.assert_called_with(state="disabled")
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_shows_shutting_down_notification(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -873,7 +875,7 @@ class TestGracefulShutdownDetachedProcess:
 
         gui._notification_bar.show_error.assert_called_with("Shutting down...")
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shutdown_timeout_still_destroys_window(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1204,7 +1206,7 @@ class TestStatusRefresh:
     - _refresh_status() does not update button states during an operation
     """
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_schedule_status_refresh_calls_root_after(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1217,7 +1219,7 @@ class TestStatusRefresh:
 
         mock_root.after.assert_called_once_with(1000, gui._refresh_status)
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_refresh_status_calls_get_status(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1237,7 +1239,7 @@ class TestStatusRefresh:
 
         mock_wrapper_core.get_status.assert_called_once()
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_refresh_status_updates_status_display(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1260,7 +1262,7 @@ class TestStatusRefresh:
 
         gui._status_display.update_status.assert_called_once_with(status)
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_refresh_status_updates_control_panel_button_states(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1285,7 +1287,7 @@ class TestStatusRefresh:
             ServerState.MONITORING
         )
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_refresh_status_reschedules_itself(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1305,7 +1307,7 @@ class TestStatusRefresh:
 
         mock_root.after.assert_called_with(1000, gui._refresh_status)
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_refresh_status_does_not_run_during_shutdown(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1321,7 +1323,7 @@ class TestStatusRefresh:
         mock_wrapper_core.get_status.assert_not_called()
         mock_root.after.assert_not_called()
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_refresh_status_does_not_update_buttons_during_operation(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1349,7 +1351,7 @@ class TestStatusRefresh:
         # But button states should NOT be updated during an operation
         gui._control_panel.update_button_states.assert_not_called()
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_refresh_status_works_without_widgets(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1371,7 +1373,7 @@ class TestStatusRefresh:
         # Should still reschedule
         mock_root.after.assert_called_with(1000, gui._refresh_status)
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     def test_refresh_status_handles_get_status_exception(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config, caplog
     ):
@@ -1391,7 +1393,7 @@ class TestStatusRefresh:
         # Should still reschedule even after an error
         mock_root.after.assert_called_with(1000, gui._refresh_status)
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_run_calls_schedule_status_refresh(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1424,7 +1426,7 @@ class TestExecuteServerOperation:
     - Refreshes button states after completion (Req 3.4, 3.5)
     """
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_start_calls_wrapper_core_start_server(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1445,7 +1447,7 @@ class TestExecuteServerOperation:
 
         mock_wrapper_core.start_server.assert_called_once()
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_stop_calls_wrapper_core_stop_server(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1466,7 +1468,7 @@ class TestExecuteServerOperation:
 
         mock_wrapper_core.stop_server.assert_called_once()
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_restart_calls_wrapper_core_restart_server(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1487,7 +1489,7 @@ class TestExecuteServerOperation:
 
         mock_wrapper_core.restart_server.assert_called_once()
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_sets_operation_in_progress_during_execution(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1522,7 +1524,7 @@ class TestExecuteServerOperation:
         assert gui._gui_state.operation_in_progress is False
         assert gui._gui_state.current_operation is None
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shows_success_notification(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1546,7 +1548,7 @@ class TestExecuteServerOperation:
 
         gui._notification_bar.show_success.assert_called_once_with("Server started successfully.")
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_shows_error_notification_on_failure(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1571,7 +1573,7 @@ class TestExecuteServerOperation:
 
         gui._notification_bar.show_error.assert_called_once_with("Port already in use")
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_calls_set_loading_on_control_panel(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1597,7 +1599,7 @@ class TestExecuteServerOperation:
         assert calls[0] == ((True,),)
         assert calls[-1] == ((False,),)
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_refreshes_button_states_after_completion(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1621,7 +1623,7 @@ class TestExecuteServerOperation:
 
         gui._control_panel.update_button_states.assert_called_once_with(ServerState.RUNNING)
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_resets_state_on_exception(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1651,7 +1653,7 @@ class TestExecuteServerOperation:
         # Error notification should be shown
         gui._notification_bar.show_error.assert_called_once()
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_works_without_control_panel(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1673,7 +1675,7 @@ class TestExecuteServerOperation:
 
         assert gui._gui_state.operation_in_progress is False
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_works_without_notification_bar(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config
     ):
@@ -1695,7 +1697,7 @@ class TestExecuteServerOperation:
 
         assert gui._gui_state.operation_in_progress is False
 
-    @patch("src.gui_interface.tk.Tk")
+    @patch("src.gui_interface.customtkinter.CTk")
     async def test_unknown_operation_logs_error(
         self, mock_tk_class, mock_build_ui, mock_wrapper_core, config, caplog
     ):
@@ -1717,149 +1719,6 @@ class TestExecuteServerOperation:
             await gui._execute_server_operation("invalid")
 
         assert "Unknown server operation" in caplog.text
-
-
-
-class TestSettingsView:
-    """Tests for SettingsView widget class (mock-based, no real Tk window).
-
-    Covers:
-    - Displays settings sorted alphabetically in "Key = Value" format (Req 5.1)
-    - Masks password values with "********" (Req 5.2)
-    - Handles __error__ key by displaying error message only (Req 5.3)
-    - Handles empty dict with informational message (Req 5.5)
-    - Provides Refresh button that re-reads settings (Req 5.4)
-    """
-
-    @pytest.fixture
-    def settings_view(self, tmp_path):
-        """Create a SettingsView with mocked tkinter environment.
-
-        Instead of fighting with patching every widget __init__, we construct
-        a minimal SettingsView by patching the parent class init and creating
-        the internal state that _display_settings() needs.
-        """
-        from src.gui_interface import SettingsView
-        from src.config import WrapperConfig
-
-        config = WrapperConfig(
-            server_exe_path=tmp_path / "PalServer.exe",
-            settings_file_path=tmp_path / "PalWorldSettings.ini",
-        )
-
-        parent = MagicMock()
-
-        # We'll intercept the __init__ entirely and just set up the object manually
-        # This is cleaner than trying to mock every widget creation call
-        view = object.__new__(SettingsView)
-        view._config = config
-
-        # Create a mock text widget that accumulates content
-        text_content = {"value": ""}
-
-        class MockTextWidget:
-            def configure(self, **kwargs):
-                pass
-
-            def delete(self, start, end):
-                text_content["value"] = ""
-
-            def insert(self, pos, text):
-                text_content["value"] += text
-
-            def get(self, start, end):
-                return text_content["value"]
-
-            def cget(self, key):
-                if key == "state":
-                    return "disabled"
-                return ""
-
-            def pack(self, **kwargs):
-                pass
-
-        view._text_widget = MockTextWidget()
-
-        # Mock refresh button
-        mock_refresh_btn = MagicMock()
-        mock_refresh_btn.cget = lambda k: "Refresh" if k == "text" else ""
-        view._refresh_button = mock_refresh_btn
-
-        # Store reference for assertions
-        view._text_content = text_content
-
-        return view
-
-    def test_display_settings_sorted_alphabetically(self, settings_view):
-        """Settings should be displayed sorted alphabetically by key."""
-        settings_view._display_settings({"Zebra": "1", "Apple": "2", "Mango": "3"})
-
-        content = settings_view._text_content["value"].strip()
-        lines = [l for l in content.split("\n") if l]
-        assert lines[0] == "Apple = 2"
-        assert lines[1] == "Mango = 3"
-        assert lines[2] == "Zebra = 1"
-
-    def test_display_settings_key_value_format(self, settings_view):
-        """Each setting should be displayed as 'Key = Value'."""
-        settings_view._display_settings({"DayTimeSpeedRate": 1.5})
-
-        content = settings_view._text_content["value"].strip()
-        assert content == "DayTimeSpeedRate = 1.5"
-
-    def test_password_masking(self, settings_view):
-        """Keys containing 'Password' should have masked values."""
-        settings_view._display_settings({"AdminPassword": "secret123", "ServerName": "MyServer"})
-
-        content = settings_view._text_content["value"].strip()
-        assert "AdminPassword = ********" in content
-        assert "ServerName = MyServer" in content
-
-    def test_password_masking_case_sensitive(self, settings_view):
-        """Password masking is case-sensitive ('Password' not 'password')."""
-        settings_view._display_settings({"password_field": "visible", "AdminPassword": "hidden"})
-
-        content = settings_view._text_content["value"].strip()
-        assert "AdminPassword = ********" in content
-        assert "password_field = visible" in content
-
-    def test_error_key_displays_error_message(self, settings_view):
-        """When __error__ key exists, display only the error message."""
-        settings_view._display_settings({"__error__": "File not found: /path/to/file"})
-
-        content = settings_view._text_content["value"].strip()
-        assert content == "File not found: /path/to/file"
-
-    def test_error_key_no_setting_rows(self, settings_view):
-        """When __error__ key exists, no setting rows should appear."""
-        settings_view._display_settings({"__error__": "Error message", "SomeKey": "SomeValue"})
-
-        content = settings_view._text_content["value"].strip()
-        assert "SomeKey" not in content
-        assert content == "Error message"
-
-    def test_empty_dict_shows_no_settings_message(self, settings_view):
-        """Empty dict should show 'No settings found' message."""
-        settings_view._display_settings({})
-
-        content = settings_view._text_content["value"].strip()
-        assert content == "No settings found in configuration file."
-
-    @patch("src.gui_interface.SettingsParser.read_settings")
-    def test_refresh_calls_settings_parser(self, mock_read_settings, settings_view):
-        """Refresh should call SettingsParser.read_settings() with config path."""
-        mock_read_settings.return_value = {"TestKey": "TestValue"}
-        settings_view.refresh()
-
-        mock_read_settings.assert_called_with(settings_view._config.settings_file_path)
-
-    def test_text_widget_is_readonly(self, settings_view):
-        """Text widget should be in disabled state (read-only)."""
-        assert settings_view._text_widget.cget("state") == "disabled"
-
-    def test_refresh_button_exists(self, settings_view):
-        """SettingsView should have a Refresh button."""
-        assert settings_view._refresh_button.cget("text") == "Refresh"
 
 
 
@@ -1979,371 +1838,6 @@ class TestHelpDialog:
         assert "auto-correct" in content.lower() or "corrected" in content.lower()
 
 
-
-
-class TestSettingsEditor:
-    """Tests for SettingsEditor widget class (mock-based, no real Tk window).
-
-    Covers:
-    - Key input limited to 128 chars (Req 6.1)
-    - Value input limited to 1024 chars (Req 6.1)
-    - Apply button triggers _on_submit() (Req 6.1)
-    - Validates using validate_and_correct() (Req 6.2)
-    - Displays auto-correction feedback (Req 6.3)
-    - Displays validation error messages without writing (Req 6.4)
-    - On success: shows confirmation and refreshes SettingsView (Req 6.5, 6.7)
-    - Warns if server is RUNNING (Req 6.6)
-    - Unknown keys written as raw string (Req 6.9)
-    - File system errors handled gracefully (Req 6.8)
-    """
-
-    @pytest.fixture
-    def _override_tk_block(self):
-        """Override the autouse _block_real_tk_creation for this class.
-
-        SettingsEditor tests need tk.StringVar which requires a Tk instance.
-        We patch StringVar itself to avoid needing a real Tk.
-        """
-
-    @pytest.fixture
-    def settings_editor(self, tmp_path):
-        """Create a SettingsEditor with mocked tkinter environment."""
-        from src.gui_interface import SettingsEditor
-        from src.config import WrapperConfig
-        from src.models import WrapperStatus, ServerState
-
-        config = WrapperConfig(
-            server_exe_path=tmp_path / "PalServer.exe",
-            settings_file_path=tmp_path / "PalWorldSettings.ini",
-        )
-        mock_core = MagicMock()
-        mock_core.get_status = MagicMock(return_value=WrapperStatus(
-            server_state=ServerState.MONITORING,
-            player_count=0,
-            idle_timer_active=False,
-            idle_seconds=0,
-            server_pid=None,
-            uptime_seconds=None,
-        ))
-        mock_callback = MagicMock()
-
-        parent = MagicMock()
-
-        # Create a mock StringVar that emulates the length-limit behavior
-        class MockStringVar:
-            """Emulates tk.StringVar without requiring a running Tk instance."""
-
-            def __init__(self, *args, **kwargs):
-                self._value = ""
-                self._traces = []
-
-            def set(self, value):
-                self._value = value
-                for cb in self._traces:
-                    cb()
-
-            def get(self):
-                return self._value
-
-            def trace_add(self, mode, callback):
-                self._traces.append(callback)
-
-        # Feedback label state tracking
-        feedback_state = {"text": "", "foreground": ""}
-
-        mock_feedback_label = MagicMock()
-        mock_feedback_label.cget = lambda key: feedback_state.get(key, "")
-
-        def feedback_configure(**kwargs):
-            feedback_state.update(kwargs)
-        mock_feedback_label.configure = feedback_configure
-
-        mock_apply_button = MagicMock()
-        mock_apply_button.cget = lambda k: "Apply" if k == "text" else ""
-
-        with patch("tkinter.ttk.LabelFrame.__init__", return_value=None):
-            with patch("src.gui_interface.tk.StringVar", MockStringVar):
-                with patch("src.gui_interface.ttk.Frame", return_value=MagicMock()):
-                    with patch("src.gui_interface.ttk.Label", return_value=mock_feedback_label):
-                        with patch("src.gui_interface.ttk.Entry", return_value=MagicMock()):
-                            with patch("src.gui_interface.ttk.Button", return_value=mock_apply_button):
-                                editor = SettingsEditor(
-                                    parent, config, mock_core, mock_callback
-                                )
-
-        # The real __init__ sets up _key_var and _value_var with traces.
-        # Our MockStringVar captures them. Now wire up the limit enforcement:
-        editor._feedback_label = mock_feedback_label
-        editor._apply_button = mock_apply_button
-        editor._feedback_state = feedback_state
-        editor._mock_core = mock_core
-        editor._mock_callback = mock_callback
-
-        return editor
-
-    def test_has_modify_setting_label(self, settings_editor):
-        """SettingsEditor should have 'Modify Setting' as its LabelFrame text."""
-        # The ttk.LabelFrame was initialized with text="Modify Setting"
-        # Verified by the init patch above
-        pass  # Structural assertion covered by __init__ argument
-
-    def test_key_limited_to_128_chars(self, settings_editor):
-        """Key entry should be limited to 128 characters."""
-        long_key = "A" * 200
-        settings_editor._key_var.set(long_key)
-        # The trace fires _limit_key_length which truncates
-        assert len(settings_editor._key_var.get()) == 128
-
-    def test_value_limited_to_1024_chars(self, settings_editor):
-        """Value entry should be limited to 1024 characters."""
-        long_value = "B" * 2000
-        settings_editor._value_var.set(long_value)
-        assert len(settings_editor._value_var.get()) == 1024
-
-    def test_empty_key_shows_error(self, settings_editor):
-        """Submitting with empty key should show error in feedback label."""
-        settings_editor._key_var.set("")
-        settings_editor._value_var.set("some_value")
-        settings_editor._on_submit()
-
-        feedback_text = settings_editor._feedback_label.cget("text")
-        assert "cannot be empty" in feedback_text
-        assert str(settings_editor._feedback_label.cget("foreground")) == "red"
-
-    def test_whitespace_only_key_shows_error(self, settings_editor):
-        """Submitting with whitespace-only key should show error."""
-        settings_editor._key_var.set("   ")
-        settings_editor._value_var.set("value")
-        settings_editor._on_submit()
-
-        feedback_text = settings_editor._feedback_label.cget("text")
-        assert "cannot be empty" in feedback_text
-
-    @patch("src.gui_interface.validate_and_correct")
-    def test_validation_error_displays_red_message(
-        self, mock_validate, settings_editor
-    ):
-        """When validation returns error string, display it in red."""
-        mock_validate.return_value = "Error: Setting 'Foo' must be an integer, got: 'abc'"
-
-        settings_editor._key_var.set("Foo")
-        settings_editor._value_var.set("abc")
-        settings_editor._on_submit()
-
-        feedback_text = settings_editor._feedback_label.cget("text")
-        assert "Error" in feedback_text
-        assert str(settings_editor._feedback_label.cget("foreground")) == "red"
-
-    @patch("src.gui_interface.validate_and_correct")
-    def test_validation_error_does_not_write_file(
-        self, mock_validate, settings_editor
-    ):
-        """When validation fails, SettingsParser.write_setting should not be called."""
-        mock_validate.return_value = "Error: invalid"
-
-        with patch("src.gui_interface.SettingsParser.write_setting") as mock_write:
-            settings_editor._key_var.set("SomeKey")
-            settings_editor._value_var.set("bad")
-            settings_editor._on_submit()
-
-            mock_write.assert_not_called()
-
-    @patch("src.gui_interface.SettingsParser.write_setting")
-    @patch("src.gui_interface.validate_and_correct")
-    def test_auto_correction_feedback_shown(
-        self, mock_validate, mock_write, settings_editor
-    ):
-        """When auto-correction is applied, show original → corrected message."""
-        from src.validation import CorrectionResult
-        from src.models import ValidationResult
-
-        mock_validate.return_value = CorrectionResult(
-            value="True", was_corrected=True, original_input="true"
-        )
-        mock_write.return_value = ValidationResult(valid=True)
-
-        settings_editor._key_var.set("bEnablePvP")
-        settings_editor._value_var.set("true")
-        settings_editor._on_submit()
-
-        feedback_text = settings_editor._feedback_label.cget("text")
-        assert "Auto-corrected" in feedback_text
-        assert "'true'" in feedback_text
-        assert "'True'" in feedback_text
-        assert str(settings_editor._feedback_label.cget("foreground")) == "blue"
-
-    @patch("src.gui_interface.SettingsParser.write_setting")
-    @patch("src.gui_interface.validate_and_correct")
-    def test_successful_write_shows_confirmation(
-        self, mock_validate, mock_write, settings_editor
-    ):
-        """On successful write, show confirmation message in green."""
-        from src.validation import CorrectionResult
-        from src.models import ValidationResult
-
-        mock_validate.return_value = CorrectionResult(
-            value="2.0", was_corrected=False, original_input="2.0"
-        )
-        mock_write.return_value = ValidationResult(valid=True)
-
-        settings_editor._key_var.set("ExpRate")
-        settings_editor._value_var.set("2.0")
-        settings_editor._on_submit()
-
-        feedback_text = settings_editor._feedback_label.cget("text")
-        assert "successfully" in feedback_text
-        assert "ExpRate" in feedback_text
-        assert str(settings_editor._feedback_label.cget("foreground")) == "green"
-
-    @patch("src.gui_interface.SettingsParser.write_setting")
-    @patch("src.gui_interface.validate_and_correct")
-    def test_successful_write_calls_on_setting_changed(
-        self, mock_validate, mock_write, settings_editor
-    ):
-        """On successful write, the on_setting_changed callback should be called."""
-        from src.validation import CorrectionResult
-        from src.models import ValidationResult
-
-        mock_validate.return_value = CorrectionResult(
-            value="TestValue", was_corrected=False, original_input="TestValue"
-        )
-        mock_write.return_value = ValidationResult(valid=True)
-
-        settings_editor._key_var.set("UnknownKey")
-        settings_editor._value_var.set("TestValue")
-        settings_editor._on_submit()
-
-        settings_editor._mock_callback.assert_called_once_with()
-
-    @patch("src.gui_interface.SettingsParser.write_setting")
-    @patch("src.gui_interface.validate_and_correct")
-    def test_running_server_shows_restart_warning(
-        self, mock_validate, mock_write, settings_editor
-    ):
-        """When server is RUNNING, show restart warning after successful write."""
-        from src.validation import CorrectionResult
-        from src.models import ValidationResult, WrapperStatus, ServerState
-
-        mock_validate.return_value = CorrectionResult(
-            value="1.5", was_corrected=False, original_input="1.5"
-        )
-        mock_write.return_value = ValidationResult(valid=True)
-        settings_editor._mock_core.get_status.return_value = WrapperStatus(
-            server_state=ServerState.RUNNING,
-            player_count=2,
-            idle_timer_active=False,
-            idle_seconds=0,
-            server_pid=1234,
-            uptime_seconds=100,
-        )
-
-        settings_editor._key_var.set("ExpRate")
-        settings_editor._value_var.set("1.5")
-        settings_editor._on_submit()
-
-        feedback_text = settings_editor._feedback_label.cget("text")
-        assert "restart" in feedback_text.lower()
-        assert "Warning" in feedback_text
-
-    @patch("src.gui_interface.SettingsParser.write_setting")
-    @patch("src.gui_interface.validate_and_correct")
-    def test_write_failure_shows_error(
-        self, mock_validate, mock_write, settings_editor
-    ):
-        """When SettingsParser.write_setting returns invalid, show error."""
-        from src.validation import CorrectionResult
-        from src.models import ValidationResult
-
-        mock_validate.return_value = CorrectionResult(
-            value="test", was_corrected=False, original_input="test"
-        )
-        mock_write.return_value = ValidationResult(
-            valid=False, error_message="File not found: /path/to/file"
-        )
-
-        settings_editor._key_var.set("SomeKey")
-        settings_editor._value_var.set("test")
-        settings_editor._on_submit()
-
-        feedback_text = settings_editor._feedback_label.cget("text")
-        assert "Error" in feedback_text
-        assert "File not found" in feedback_text
-        assert str(settings_editor._feedback_label.cget("foreground")) == "red"
-
-    @patch("src.gui_interface.SettingsParser.write_setting")
-    @patch("src.gui_interface.validate_and_correct")
-    def test_write_failure_does_not_call_callback(
-        self, mock_validate, mock_write, settings_editor
-    ):
-        """When write fails, on_setting_changed callback should NOT be called."""
-        from src.validation import CorrectionResult
-        from src.models import ValidationResult
-
-        mock_validate.return_value = CorrectionResult(
-            value="test", was_corrected=False, original_input="test"
-        )
-        mock_write.return_value = ValidationResult(
-            valid=False, error_message="Write error"
-        )
-
-        settings_editor._key_var.set("SomeKey")
-        settings_editor._value_var.set("test")
-        settings_editor._on_submit()
-
-        settings_editor._mock_callback.assert_not_called()
-
-    @patch("src.gui_interface.SettingsParser.write_setting")
-    @patch("src.gui_interface.validate_and_correct")
-    def test_filesystem_exception_handled_gracefully(
-        self, mock_validate, mock_write, settings_editor
-    ):
-        """File system exceptions should be caught and shown as error."""
-        from src.validation import CorrectionResult
-
-        mock_validate.return_value = CorrectionResult(
-            value="test", was_corrected=False, original_input="test"
-        )
-        mock_write.side_effect = OSError("Permission denied")
-
-        settings_editor._key_var.set("SomeKey")
-        settings_editor._value_var.set("test")
-        settings_editor._on_submit()
-
-        feedback_text = settings_editor._feedback_label.cget("text")
-        assert "Error" in feedback_text
-        assert "Permission denied" in feedback_text
-        assert str(settings_editor._feedback_label.cget("foreground")) == "red"
-
-    @patch("src.gui_interface.validate_and_correct")
-    def test_unknown_key_passes_validation(self, mock_validate, settings_editor):
-        """Unknown keys should pass validation (returned as CorrectionResult)."""
-        from src.validation import CorrectionResult
-        from src.models import ValidationResult
-
-        # validate_and_correct for unknown keys returns CorrectionResult with value as-is
-        mock_validate.return_value = CorrectionResult(
-            value="raw_string_value", was_corrected=False, original_input="raw_string_value"
-        )
-
-        with patch("src.gui_interface.SettingsParser.write_setting") as mock_write:
-            mock_write.return_value = ValidationResult(valid=True)
-            settings_editor._key_var.set("UnknownCustomSetting")
-            settings_editor._value_var.set("raw_string_value")
-            settings_editor._on_submit()
-
-            mock_write.assert_called_once()
-            # Verify the key and value passed to write_setting
-            call_args = mock_write.call_args
-            assert call_args[0][1] == "UnknownCustomSetting"
-            assert call_args[0][2] == "raw_string_value"
-
-    def test_apply_button_exists(self, settings_editor):
-        """SettingsEditor should have an Apply button."""
-        assert settings_editor._apply_button.cget("text") == "Apply"
-
-    def test_feedback_label_initially_empty(self, settings_editor):
-        """Feedback label should start empty."""
-        assert settings_editor._feedback_label.cget("text") == ""
 
 
 
