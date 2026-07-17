@@ -713,7 +713,7 @@ class TestGracefulShutdownDetachedProcess:
             return_value=MagicMock(success=True)
         )
         real_core._connection_listener.stop_listening = AsyncMock()
-        real_core._rcon_client.disconnect = AsyncMock()
+        real_core._rest_client.close = AsyncMock()
         real_core._logger.log_state_transition = MagicMock()
 
         gui = GuiInterface(real_core, config)
@@ -746,7 +746,7 @@ class TestGracefulShutdownDetachedProcess:
         real_core._process_manager.is_running = AsyncMock(return_value=False)
         real_core._process_manager.stop_server = AsyncMock()
         real_core._connection_listener.stop_listening = AsyncMock()
-        real_core._rcon_client.disconnect = AsyncMock()
+        real_core._rest_client.close = AsyncMock()
         real_core._logger.log_state_transition = MagicMock()
 
         gui = GuiInterface(real_core, config)
@@ -789,7 +789,7 @@ class TestGracefulShutdownDetachedProcess:
             return_value=MagicMock(success=True)
         )
         real_core._connection_listener.stop_listening = AsyncMock()
-        real_core._rcon_client.disconnect = AsyncMock()
+        real_core._rest_client.close = AsyncMock()
 
         # Directly test the cleanup path that runs after quit
         await real_core._cleanup()
