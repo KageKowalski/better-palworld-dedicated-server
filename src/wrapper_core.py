@@ -1,7 +1,7 @@
 """Wrapper Core - central state machine coordinator for the Palworld Server Wrapper.
 
 Manages state transitions between MONITORING, STARTING, RUNNING, and STOPPING.
-Orchestrates all components: ConnectionListener, ProcessManager, RconClient,
+Orchestrates all components: ConnectionListener, ProcessManager, RestClient,
 IdleTimer, WrapperLogger, and SettingsParser.
 """
 
@@ -23,7 +23,6 @@ from src.models import (
 )
 from src.pending_settings import ApplyResult, PendingSettingsQueue
 from src.process_manager import ProcessManager
-from src.rcon_client import RconClient
 from src.rest_client import RestClient
 from src.settings_parser import SettingsParser
 from src.steam_updater import SteamUpdater
@@ -56,11 +55,7 @@ class WrapperCore:
         self._logger = WrapperLogger()
         self._settings_parser = SettingsParser()
         self._process_manager = ProcessManager(on_crash=self.handle_server_crashed)
-        self._rcon_client = RconClient(
-            host="127.0.0.1",
-            port=config.api_port,
-            password=config.admin_password,
-        )
+
         self._rest_client = RestClient(
             host="127.0.0.1",
             port=config.api_port,
@@ -242,7 +237,7 @@ class WrapperCore:
         """Handle unexpected server process termination.
 
         Only acts if in RUNNING or STARTING state. Logs the crash event,
-        cancels RCON polling and idle timer, transitions to MONITORING,
+        cancels REST polling and idle timer, transitions to MONITORING,
         and restarts the connection listener.
         """
         if self._state not in (ServerState.RUNNING, ServerState.STARTING):
@@ -263,13 +258,11 @@ class WrapperCore:
         self._running_since = None
         self._consecutive_rest_failures = 0
 
-        # Disconnect RCON
-        await self._rcon_client.disconnect()
+        # Close REST client
+        await self._rest_client.close()
 
         # Transition to MONITORING
         self._transition_to(ServerState.MONITORING, "Server process crashed")
-
-        # Apply any pending settings changes
         apply_result = self._pending_queue.apply(self._config.settings_file_path)
         if apply_result.applied_count > 0 or apply_result.failed_key is not None:
             self._notify_apply_result(apply_result)
@@ -335,7 +328,7 @@ class WrapperCore:
         """Stop the server gracefully with force-kill fallback.
 
         Only works from RUNNING state. Transitions through STOPPING to MONITORING.
-        Sends the RCON Shutdown command first for a graceful save-and-exit,
+        Sends the REST API shutdown request first for a graceful save-and-exit,
         then kills the process tree as a fallback to ensure all child processes
         are cleaned up.
 
@@ -350,19 +343,22 @@ class WrapperCore:
         # Transition to STOPPING
         self._transition_to(ServerState.STOPPING, "Stop command issued")
 
-        # Cancel RCON polling and idle timer
+        # Cancel REST polling and idle timer
         self._cancel_rest_polling()
         self._idle_timer.cancel()
 
-        # Send RCON Shutdown command for graceful save-and-exit before
-        # disconnecting. This tells PalServer to save world data and exit.
-        try:
-            await self._rcon_client.send_command("Shutdown")
-        except Exception as e:
-            logger.warning("RCON Shutdown command failed: %s", e)
+        # Send REST API shutdown for graceful save-and-exit.
+        # This tells PalServer to save world data and exit.
+        shutdown_result = await self._rest_client.shutdown(
+            waittime=1, message="Server shutting down"
+        )
+        if not shutdown_result.success:
+            logger.warning(
+                "REST API shutdown request failed: %s", shutdown_result.error_message
+            )
 
-        # Disconnect RCON
-        await self._rcon_client.disconnect()
+        # Close REST client session
+        await self._rest_client.close()
 
         # Kill the process tree — PalServer.exe spawns child processes that
         # must all be terminated to release UDP port 8211
@@ -460,9 +456,9 @@ class WrapperCore:
         """Handle the maintenance broadcast timer firing.
 
         Sends a warning message to connected players that maintenance is
-        approaching. If no players are connected, the broadcast is skipped.
-        If the RCON command fails, a warning is logged and the maintenance
-        cycle continues regardless.
+        approaching via the REST API announce endpoint. If no players are
+        connected, the broadcast is skipped. If the announce fails, a warning
+        is logged and the maintenance cycle continues regardless (no retry).
         """
         if self._maintenance_in_progress:
             logger.debug("Broadcast skipped: maintenance already in progress")
@@ -476,27 +472,20 @@ class WrapperCore:
             )
             return
 
-        broadcast_message = (
-            f"Broadcast Server_maintenance_in_{remaining_seconds}_seconds"
-        )
-
-        try:
-            await self._rcon_client.send_command(broadcast_message)
-            logger.info(
-                "Maintenance broadcast sent: %s", broadcast_message
-            )
-        except Exception as e:
+        message = f"Server maintenance in {remaining_seconds} seconds"
+        result = await self._rest_client.announce(message)
+        if result.success:
+            logger.info("Maintenance broadcast sent: %s", message)
+        else:
             logger.warning(
-                "Failed to send maintenance broadcast '%s': %s",
-                broadcast_message,
-                e,
+                "Failed to send maintenance broadcast: %s", result.error_message
             )
 
     async def _handle_maintenance_due(self) -> None:
         """Handle the maintenance timer firing.
 
         Orchestrates the full maintenance cycle: stop, update, restart.
-        Sets the maintenance-in-progress flag, cancels timers and RCON polling,
+        Sets the maintenance-in-progress flag, cancels timers and REST polling,
         then delegates to _run_maintenance_cycle().
         """
         if self._maintenance_in_progress:
@@ -527,14 +516,18 @@ class WrapperCore:
         # --- STOPPING phase ---
         self._transition_to(ServerState.STOPPING, "Maintenance cycle initiated")
 
-        # Send RCON Shutdown for graceful save-and-exit
-        try:
-            await self._rcon_client.send_command("Shutdown")
-        except Exception as e:
-            logger.warning("RCON Shutdown command failed during maintenance: %s", e)
+        # Send REST API shutdown for graceful save-and-exit
+        shutdown_result = await self._rest_client.shutdown(
+            waittime=1, message="Server shutting down for maintenance"
+        )
+        if not shutdown_result.success:
+            logger.warning(
+                "REST API shutdown failed during maintenance: %s",
+                shutdown_result.error_message,
+            )
 
-        # Disconnect RCON
-        await self._rcon_client.disconnect()
+        # Close REST client session
+        await self._rest_client.close()
 
         # Stop the server process (proceed even if it fails)
         stop_result = await self._process_manager.stop_server(
@@ -650,7 +643,7 @@ class WrapperCore:
         asyncio.create_task(self.handle_connection_detected())
 
     async def _enter_running_state(self) -> None:
-        """Transition to RUNNING state and start RCON polling + idle timer."""
+        """Transition to RUNNING state and start REST polling + idle timer."""
         self._transition_to(ServerState.RUNNING, "Server is ready")
 
         # Record start time for uptime tracking
@@ -703,8 +696,36 @@ class WrapperCore:
         Runs while the server is in RUNNING state. Handles player count
         updates, idle timer management, and failure tracking.
         """
-        # Give the server a moment to initialize the REST API
+        # Give the server a moment to initialize the REST API (Req 8.1)
         await asyncio.sleep(2)
+
+        # Initial connectivity check with retry (Req 8.1, 8.2, 8.3, 8.4, 8.5)
+        max_attempts = 5
+        delays = [2, 4, 8, 16, 30]  # seconds between retries
+
+        for attempt in range(1, max_attempts + 1):
+            if self._state != ServerState.RUNNING:
+                logger.debug("State changed during REST API connect retry, aborting")
+                return
+
+            info_result = await self._rest_client.get_info()
+            if info_result.success:
+                logger.info("REST API connectivity confirmed (attempt %d)", attempt)
+                break
+
+            if attempt < max_attempts:
+                delay = delays[attempt - 1]
+                logger.warning(
+                    "REST API connection attempt %d/%d failed, retrying in %ds...",
+                    attempt, max_attempts, delay,
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error(
+                    "REST API connection failed after %d attempts. "
+                    "Will continue polling with reconnect-on-failure fallback.",
+                    max_attempts,
+                )
 
         try:
             while self._state == ServerState.RUNNING:
@@ -773,7 +794,7 @@ class WrapperCore:
         self._cancel_rest_polling()
         self._idle_timer.cancel()
         await self._connection_listener.stop_listening()
-        await self._rcon_client.disconnect()
+        await self._rest_client.close()
 
         if await self._process_manager.is_running():
             logger.info("Stopping server process during wrapper shutdown")
