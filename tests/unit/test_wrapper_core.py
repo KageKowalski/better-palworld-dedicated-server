@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.config import WrapperConfig
-from src.models import ServerState, StartResult, StopResult
+from src.models import AnnounceResult, ServerState, ShutdownResult, StartResult, StopResult
 from src.wrapper_core import WrapperCore
 
 
@@ -51,9 +51,11 @@ class TestIdleTimeoutStopFlow:
         )
         core._process_manager.get_pid = MagicMock(return_value=12345)
 
-        # Mock RCON client
-        core._rcon_client.send_command = AsyncMock(return_value=None)
-        core._rcon_client.disconnect = AsyncMock()
+        # Mock REST client
+        core._rest_client.shutdown = AsyncMock(
+            return_value=ShutdownResult(success=True)
+        )
+        core._rest_client.close = AsyncMock()
 
         # Mock connection listener
         core._connection_listener.start_listening = AsyncMock()
@@ -83,8 +85,10 @@ class TestIdleTimeoutStopFlow:
             return_value=StopResult(success=True, was_forced=False)
         )
         core._process_manager.get_pid = MagicMock(return_value=12345)
-        core._rcon_client.send_command = AsyncMock(return_value=None)
-        core._rcon_client.disconnect = AsyncMock()
+        core._rest_client.shutdown = AsyncMock(
+            return_value=ShutdownResult(success=True)
+        )
+        core._rest_client.close = AsyncMock()
         core._connection_listener.start_listening = AsyncMock()
         core._logger.log_state_transition = MagicMock()
 
@@ -110,8 +114,10 @@ class TestIdleTimeoutStopFlow:
             return_value=StopResult(success=True, was_forced=False)
         )
         core._process_manager.get_pid = MagicMock(return_value=12345)
-        core._rcon_client.send_command = AsyncMock(return_value=None)
-        core._rcon_client.disconnect = AsyncMock()
+        core._rest_client.shutdown = AsyncMock(
+            return_value=ShutdownResult(success=True)
+        )
+        core._rest_client.close = AsyncMock()
         core._connection_listener.start_listening = AsyncMock()
         core._logger.log_state_transition = MagicMock()
 
@@ -137,8 +143,10 @@ class TestIdleTimeoutStopFlow:
             return_value=StopResult(success=True, was_forced=False)
         )
         core._process_manager.get_pid = MagicMock(return_value=12345)
-        core._rcon_client.send_command = AsyncMock(return_value=None)
-        core._rcon_client.disconnect = AsyncMock()
+        core._rest_client.shutdown = AsyncMock(
+            return_value=ShutdownResult(success=True)
+        )
+        core._rest_client.close = AsyncMock()
         core._connection_listener.start_listening = AsyncMock()
         core._logger.log_state_transition = MagicMock()
 
@@ -158,8 +166,10 @@ class TestIdleTimeoutStopFlow:
             return_value=StopResult(success=True, was_forced=False)
         )
         core._process_manager.get_pid = MagicMock(return_value=12345)
-        core._rcon_client.send_command = AsyncMock(return_value=None)
-        core._rcon_client.disconnect = AsyncMock()
+        core._rest_client.shutdown = AsyncMock(
+            return_value=ShutdownResult(success=True)
+        )
+        core._rest_client.close = AsyncMock()
         core._connection_listener.start_listening = AsyncMock()
         core._logger.log_state_transition = MagicMock()
 
@@ -196,3 +206,76 @@ class TestStopServerGuards:
 
         # stop_server should NOT have been called
         core._process_manager.stop_server.assert_not_called()
+
+
+@pytest.mark.asyncio
+class TestBroadcastDue:
+    """Test _handle_broadcast_due uses REST announce endpoint."""
+
+    async def test_broadcast_sends_announce_with_human_readable_message(self, tmp_path):
+        """Broadcast sends human-readable message via REST announce."""
+        config = _make_config(tmp_path)
+        config.maintenance_broadcast_lead_seconds = 300
+        core = WrapperCore(config)
+        core._state = ServerState.RUNNING
+        core._player_count = 2
+
+        core._rest_client.announce = AsyncMock(
+            return_value=AnnounceResult(success=True)
+        )
+
+        await core._handle_broadcast_due()
+
+        core._rest_client.announce.assert_called_once_with(
+            "Server maintenance in 300 seconds"
+        )
+
+    async def test_broadcast_skipped_when_no_players(self, tmp_path):
+        """Broadcast is skipped when player count is zero."""
+        config = _make_config(tmp_path)
+        core = WrapperCore(config)
+        core._state = ServerState.RUNNING
+        core._player_count = 0
+
+        core._rest_client.announce = AsyncMock(
+            return_value=AnnounceResult(success=True)
+        )
+
+        await core._handle_broadcast_due()
+
+        core._rest_client.announce.assert_not_called()
+
+    async def test_broadcast_skipped_when_maintenance_in_progress(self, tmp_path):
+        """Broadcast is skipped when maintenance is already running."""
+        config = _make_config(tmp_path)
+        core = WrapperCore(config)
+        core._state = ServerState.RUNNING
+        core._player_count = 5
+        core._maintenance_in_progress = True
+
+        core._rest_client.announce = AsyncMock(
+            return_value=AnnounceResult(success=True)
+        )
+
+        await core._handle_broadcast_due()
+
+        core._rest_client.announce.assert_not_called()
+
+    async def test_broadcast_failure_logs_warning_and_continues(self, tmp_path):
+        """On announce failure, a warning is logged but no exception raised."""
+        config = _make_config(tmp_path)
+        config.maintenance_broadcast_lead_seconds = 60
+        core = WrapperCore(config)
+        core._state = ServerState.RUNNING
+        core._player_count = 1
+
+        core._rest_client.announce = AsyncMock(
+            return_value=AnnounceResult(success=False, error_message="Connection error")
+        )
+
+        # Should not raise — failure is handled gracefully
+        await core._handle_broadcast_due()
+
+        core._rest_client.announce.assert_called_once_with(
+            "Server maintenance in 60 seconds"
+        )
