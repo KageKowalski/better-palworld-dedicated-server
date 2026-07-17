@@ -18,14 +18,14 @@ class WrapperConfig:
 
     # Network
     game_port: int = 8211  # UDP port for game connections
-    api_port: int = 8212  # REST API port (replaces rcon_port)
-    admin_password: str = ""  # Admin password for REST API (replaces rcon_password)
+    api_port: int = 8212  # REST API port
+    admin_password: str = ""  # Admin password for REST API Basic Auth
 
     # Timing
     idle_timeout_seconds: int = 300  # Seconds before idle shutdown
     start_timeout_seconds: int = 120  # Max wait for server startup
     stop_timeout_seconds: int = 30  # Max wait for graceful shutdown
-    poll_interval_seconds: int = 10  # Seconds between REST API polls (replaces rcon_poll_interval_seconds)
+    poll_interval_seconds: int = 10  # Seconds between REST API polls
 
     # Logging
     log_file_path: Path = field(default_factory=lambda: Path("wrapper.log"))

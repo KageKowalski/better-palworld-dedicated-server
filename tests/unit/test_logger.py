@@ -125,10 +125,10 @@ class TestWrapperLoggerError:
         logger.setup(log_file)
 
         error = RuntimeError("connection refused")
-        logger.log_error("RCON query failed", error)
+        logger.log_error("REST API query failed", error)
 
         content = log_file.read_text(encoding="utf-8")
-        assert "RCON query failed: connection refused" in content
+        assert "REST API query failed: connection refused" in content
 
     def test_log_error_uses_error_level(self, tmp_path: Path) -> None:
         log_file = tmp_path / "test.log"

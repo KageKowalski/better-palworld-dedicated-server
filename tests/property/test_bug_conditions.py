@@ -1,21 +1,24 @@
-# Property 1: Bug Condition - Port Readiness, UDP Rebind, and RCON Connection Failures
+# Property 1: Bug Condition - Port Readiness, UDP Rebind, and REST API Connection Failures
 # These tests validate the expected (correct) behavior after bug fixes.
 """Bug condition exploration tests for the three interrelated startup bugs.
 
 Tests exercise:
-1a. TCP port check on RCON port 25575 (the fix: check TCP port that IS available)
+1a. TCP port check on REST API port 8212 (the fix: check TCP port that IS available)
 1b. Retry with exponential backoff on UDP bind failure in ConnectionListener
-1c. RCON initial connection retry before first player count query
+1c. REST API initial connectivity retry before first metrics poll
 """
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from hypothesis import given, settings, strategies as st
 
+from src.config import WrapperConfig
 from src.connection_listener import ConnectionListener
+from src.models import InfoResult, MetricsResult, ServerState
 from src.process_manager import ProcessManager
-from src.rcon_client import RconClient
+from src.wrapper_core import WrapperCore
 
 
 class TestBugConditionExploration:
@@ -26,19 +29,19 @@ class TestBugConditionExploration:
     """
 
     # -------------------------------------------------------------------------
-    # Test 1a: Port readiness check now uses RCON TCP port (25575)
+    # Test 1a: Port readiness check now uses REST API TCP port (8212)
     # -------------------------------------------------------------------------
 
     @given(timeout=st.integers(min_value=2, max_value=3))
     @settings(max_examples=100, deadline=None)
-    async def test_wait_for_port_detects_udp_server_readiness(
+    async def test_wait_for_port_detects_server_readiness(
         self, timeout: int
     ) -> None:
-        """wait_for_port(25575) should return True when the RCON port is ready.
+        """wait_for_port(8212) should return True when the REST API port is ready.
 
         Bug (fixed): _try_connect uses SOCK_STREAM (TCP) which cannot connect
-        to a UDP-only port 8211. The fix changes the target to RCON port 25575
-        which IS a TCP port, so _try_connect succeeds.
+        to a UDP-only port 8211. The fix changes the target to REST API port
+        8212 which IS a TCP port, so _try_connect succeeds.
 
         Validates: Requirements 1.1
         """
@@ -49,17 +52,17 @@ class TestBugConditionExploration:
         mock_process.returncode = None
         pm._process = mock_process
 
-        # The fix: wait_for_port is now called with port 25575 (RCON, TCP).
-        # Since RCON port is TCP, _try_connect with SOCK_STREAM succeeds.
+        # The fix: wait_for_port is now called with port 8212 (REST API, TCP).
+        # Since REST API port is TCP, _try_connect with SOCK_STREAM succeeds.
         # We patch _try_connect to return True — simulating that TCP connect
-        # to the RCON port works correctly (the server's RCON is ready).
+        # to the REST API port works correctly (the server's API is ready).
         with patch.object(pm, "_try_connect", return_value=True):
-            result = await pm.wait_for_port(port=25575, timeout=timeout)
+            result = await pm.wait_for_port(port=8212, timeout=timeout)
 
-        # EXPECTED BEHAVIOR: should return True when RCON port is available
-        # This validates the fix: checking port 25575 (TCP) instead of 8211 (UDP)
+        # EXPECTED BEHAVIOR: should return True when REST API port is available
+        # This validates the fix: checking port 8212 (TCP) instead of 8211 (UDP)
         assert result is True, (
-            "wait_for_port(25575) should detect server readiness via RCON TCP port, "
+            "wait_for_port(8212) should detect server readiness via REST API TCP port, "
             f"but failed after {timeout}s"
         )
 
@@ -113,7 +116,7 @@ class TestBugConditionExploration:
         )
 
     # -------------------------------------------------------------------------
-    # Test 1c: RCON initial connection retry before first query
+    # Test 1c: REST API initial connectivity retry before first metrics poll
     # -------------------------------------------------------------------------
 
     @given(
@@ -121,78 +124,58 @@ class TestBugConditionExploration:
         player_count=st.integers(min_value=0, max_value=10),
     )
     @settings(max_examples=100, deadline=None)
-    async def test_rcon_query_succeeds_after_initial_connect_failure(
+    async def test_rest_api_poll_succeeds_after_initial_connect_failure(
         self, num_connect_failures: int, player_count: int
     ) -> None:
-        """query_players() should return success after connect() retries succeed.
+        """get_metrics() should return success after get_info() retries succeed.
 
-        Bug (fixed): _rcon_poll_loop called connect() once. If it failed, the
-        code continued to the poll loop where query_players() returned
-        "RCON not connected". The fix adds a retry loop (up to 5 attempts)
-        before the poll loop begins.
+        Bug (fixed): _rest_poll_loop called get_info() once. If it failed, the
+        code continued to the poll loop without a working connection. The fix
+        adds a retry loop (up to 5 attempts with backoff) before the poll loop
+        begins.
 
-        This test simulates the retry behavior: connect() is called repeatedly
-        until it succeeds (up to max_attempts), then query_players() is called.
+        This test simulates the retry behavior: get_info() is called repeatedly
+        until it succeeds (up to max_attempts), then get_metrics() is called.
 
         Validates: Requirements 1.3
         """
-        rcon = RconClient(host="127.0.0.1", port=25575, password="test")
-
-        # Simulate connect() failing on first N attempts, then succeeding
-        connect_call_count = [0]
-
-        async def mock_connect() -> bool:
-            connect_call_count[0] += 1
-            if connect_call_count[0] <= num_connect_failures:
-                rcon._connected = False
-                rcon._client = None
-                return False
-            # Success
-            rcon._connected = True
-            rcon._client = MagicMock()
-            return True
-
-        # Build expected ShowPlayers response
-        player_lines = "\n".join(
-            [f"Player{i},uid{i},steam{i}" for i in range(player_count)]
+        config = WrapperConfig(
+            server_exe_path=Path("PalServer.exe"),
+            settings_file_path=Path("PalWorldSettings.ini"),
+            api_port=8212,
+            admin_password="test",
+            poll_interval_seconds=1,
         )
-        show_players_response = (
-            f"name,playeruid,steamid\n{player_lines}" if player_count > 0 else ""
+        core = WrapperCore(config)
+        core._state = ServerState.RUNNING
+
+        # Simulate get_info() failing on first N attempts, then succeeding
+        info_responses = [
+            InfoResult(success=False, error_message="Connection refused")
+            for _ in range(num_connect_failures)
+        ] + [InfoResult(success=True, version="v0.3.5")]
+
+        core._rest_client.get_info = AsyncMock(side_effect=info_responses)
+
+        # After connectivity is established, get_metrics returns player count
+        # then stops the loop
+        async def metrics_then_stop():
+            core._state = ServerState.STOPPING
+            return MetricsResult(success=True, player_count=player_count)
+
+        core._rest_client.get_metrics = AsyncMock(side_effect=metrics_then_stop)
+        core._idle_timer.start = AsyncMock()
+        core._idle_timer.is_active = MagicMock(return_value=False)
+        core._logger.log_state_transition = MagicMock()
+        core._logger.log_player_event = MagicMock()
+        core._logger.log_error = MagicMock()
+
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await core._rest_poll_loop()
+
+        # EXPECTED BEHAVIOR: after retry loop succeeds, get_metrics() works
+        assert core._rest_client.get_info.call_count == num_connect_failures + 1, (
+            f"get_info() retry loop should succeed after {num_connect_failures} "
+            f"failures (called {core._rest_client.get_info.call_count} times)"
         )
-
-        rcon.connect = mock_connect  # type: ignore[assignment]
-
-        # Simulate the FIXED _rcon_poll_loop initial connection phase:
-        # The fix retries connect() up to 5 times before entering the poll loop.
-        max_attempts = 5
-        connected = False
-        for attempt in range(1, max_attempts + 1):
-            connected = await rcon.connect()
-            if connected:
-                break
-
-        # After the retry loop, RCON should be connected
-        assert connected is True, (
-            f"RCON connect retry loop should succeed after {num_connect_failures} "
-            f"failures (max attempts: {max_attempts})"
-        )
-
-        # Now query players - should succeed since we're connected
-        # Mock the actual RCON query to return our test data
-        async def mock_query_players():
-            if not rcon._connected or rcon._client is None:
-                from src.models import RconQueryResult
-                return RconQueryResult(success=False, error_message="RCON not connected")
-            from src.models import RconQueryResult
-            parsed_count = RconClient._parse_player_response(show_players_response)
-            return RconQueryResult(success=True, player_count=parsed_count)
-
-        with patch.object(rcon, "query_players", side_effect=mock_query_players):
-            result = await rcon.query_players()
-
-        # EXPECTED BEHAVIOR: after retry loop succeeds, query_players() works
-        assert result.success is True, (
-            f"query_players() should succeed after RCON retries connection, "
-            f"but initial connect failure (after {num_connect_failures} "
-            f"failure(s)) leaves RCON disconnected with no retry before first query"
-        )
+        core._rest_client.get_metrics.assert_called_once()
