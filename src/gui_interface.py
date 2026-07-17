@@ -791,9 +791,9 @@ class StatusDisplay(customtkinter.CTkFrame):
     Server PID (only when available), and Uptime (only when available).
 
     Fields are arranged in a two-column grid (labels in column 0, values in
-    column 1). Server PID and Uptime rows are completely omitted when their
-    values are None. The display is rebuilt on each update_status() call to
-    handle the conditional field presence cleanly.
+    column 1). Always-visible fields (State, Players, Idle Timer) are created
+    once and updated in-place via configure() to avoid flicker. Conditional
+    fields (PID, Uptime) are shown/hidden as needed.
     """
 
     def __init__(self, parent: tk.Widget, idle_timeout_threshold: int) -> None:
@@ -812,32 +812,93 @@ class StatusDisplay(customtkinter.CTkFrame):
         self.columnconfigure(0, weight=0)
         self.columnconfigure(1, weight=1)
 
-        # Track current field widgets for cleanup on rebuild
-        self._field_widgets: list[customtkinter.CTkLabel] = []
+        # Track whether conditional fields are currently visible
+        self._pid_visible = False
+        self._uptime_visible = False
 
-        # Show initial placeholder state
-        self._build_fields(
-            state="MONITORING",
-            player_count=0,
-            idle_timer_text="Not active",
-            server_pid=None,
-            uptime_seconds=None,
+        # --- Always-visible fields (created once, updated in-place) ---
+
+        # Row 0: State
+        self._state_name_label = customtkinter.CTkLabel(
+            self, text="State:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
+        )
+        self._state_name_label.grid(
+            row=0, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
+        )
+        self._state_value_label = customtkinter.CTkLabel(
+            self, text="MONITORING", font=FONT_BODY, text_color=COLOR_TEXT
+        )
+        self._state_value_label.grid(
+            row=0, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
+        )
+
+        # Row 1: Players
+        self._players_name_label = customtkinter.CTkLabel(
+            self, text="Players:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
+        )
+        self._players_name_label.grid(
+            row=1, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
+        )
+        self._players_value_label = customtkinter.CTkLabel(
+            self, text="0", font=FONT_BODY, text_color=COLOR_TEXT
+        )
+        self._players_value_label.grid(
+            row=1, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
+        )
+
+        # Row 2: Idle Timer
+        self._idle_name_label = customtkinter.CTkLabel(
+            self, text="Idle Timer:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
+        )
+        self._idle_name_label.grid(
+            row=2, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
+        )
+        self._idle_value_label = customtkinter.CTkLabel(
+            self, text="Not active", font=FONT_BODY, text_color=COLOR_TEXT
+        )
+        self._idle_value_label.grid(
+            row=2, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
+        )
+
+        # --- Conditional fields (created once, shown/hidden via grid) ---
+
+        # Row 3: Server PID
+        self._pid_name_label = customtkinter.CTkLabel(
+            self, text="Server PID:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
+        )
+        self._pid_value_label = customtkinter.CTkLabel(
+            self, text="", font=FONT_BODY, text_color=COLOR_TEXT
+        )
+
+        # Row 4: Uptime
+        self._uptime_name_label = customtkinter.CTkLabel(
+            self, text="Uptime:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
+        )
+        self._uptime_value_label = customtkinter.CTkLabel(
+            self, text="", font=FONT_BODY, text_color=COLOR_TEXT
         )
 
     def update_status(self, status: WrapperStatus) -> None:
         """Update all status fields from a WrapperStatus snapshot.
 
-        Rebuilds the field display to handle conditional PID/uptime visibility.
-        Shows state in uppercase, formats idle timer based on active status,
-        and omits PID/uptime fields when their values are None.
+        Updates always-visible labels in-place via configure() to avoid flicker.
+        Shows or hides conditional PID/Uptime fields only when their visibility
+        state changes.
 
         Args:
             status: The current WrapperStatus snapshot from WrapperCore.
         """
-        # Format state as uppercase
-        state_text = status.server_state.name.upper()
+        # --- Update always-visible fields in-place ---
 
-        # Format idle timer
+        # State
+        state_text = status.server_state.name.upper()
+        state_value_color = COLOR_ACCENT if state_text == "RUNNING" else COLOR_TEXT
+        self._state_value_label.configure(text=state_text, text_color=state_value_color)
+
+        # Players
+        self._players_value_label.configure(text=str(status.player_count))
+
+        # Idle Timer
         if status.idle_timer_active:
             idle_timer_text = (
                 f"{status.idle_seconds}s elapsed "
@@ -845,127 +906,45 @@ class StatusDisplay(customtkinter.CTkFrame):
             )
         else:
             idle_timer_text = "Not active"
+        self._idle_value_label.configure(text=idle_timer_text)
 
-        # Rebuild the display with current values
-        self._build_fields(
-            state=state_text,
-            player_count=status.player_count,
-            idle_timer_text=idle_timer_text,
-            server_pid=status.server_pid,
-            uptime_seconds=status.uptime_seconds,
-        )
+        # --- Update conditional fields (show/hide only on visibility change) ---
 
-    def _build_fields(
-        self,
-        state: str,
-        player_count: int,
-        idle_timer_text: str,
-        server_pid: int | None,
-        uptime_seconds: int | None,
-    ) -> None:
-        """Rebuild the status field display.
+        # Server PID
+        pid_should_show = status.server_pid is not None
+        if pid_should_show != self._pid_visible:
+            if pid_should_show:
+                self._pid_name_label.grid(
+                    row=3, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
+                )
+                self._pid_value_label.grid(
+                    row=3, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
+                )
+            else:
+                self._pid_name_label.grid_remove()
+                self._pid_value_label.grid_remove()
+            self._pid_visible = pid_should_show
 
-        Destroys existing field widgets and creates new ones based on current
-        values. Conditional fields (PID, Uptime) are only created when their
-        values are not None. Uses a two-column grid with CTkLabel widgets
-        styled via Theme_Engine constants.
+        if pid_should_show:
+            self._pid_value_label.configure(text=str(status.server_pid))
 
-        Args:
-            state: The server state text (uppercase).
-            player_count: Current connected player count.
-            idle_timer_text: Formatted idle timer display string.
-            server_pid: Server process PID, or None to omit the field.
-            uptime_seconds: Server uptime in seconds, or None to omit the field.
-        """
-        # Destroy existing field widgets
-        for widget in self._field_widgets:
-            widget.destroy()
-        self._field_widgets.clear()
+        # Uptime
+        uptime_should_show = status.uptime_seconds is not None
+        if uptime_should_show != self._uptime_visible:
+            if uptime_should_show:
+                self._uptime_name_label.grid(
+                    row=4, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
+                )
+                self._uptime_value_label.grid(
+                    row=4, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
+                )
+            else:
+                self._uptime_name_label.grid_remove()
+                self._uptime_value_label.grid_remove()
+            self._uptime_visible = uptime_should_show
 
-        row = 0
-
-        # State field (always shown)
-        state_value_color = COLOR_ACCENT if state == "RUNNING" else COLOR_TEXT
-        state_name_label = customtkinter.CTkLabel(
-            self, text="State:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
-        )
-        state_name_label.grid(
-            row=row, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
-        )
-        state_value_label = customtkinter.CTkLabel(
-            self, text=state, font=FONT_BODY, text_color=state_value_color
-        )
-        state_value_label.grid(
-            row=row, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
-        )
-        self._field_widgets.extend([state_name_label, state_value_label])
-        row += 1
-
-        # Player Count field (always shown)
-        players_name_label = customtkinter.CTkLabel(
-            self, text="Players:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
-        )
-        players_name_label.grid(
-            row=row, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
-        )
-        players_value_label = customtkinter.CTkLabel(
-            self, text=str(player_count), font=FONT_BODY, text_color=COLOR_TEXT
-        )
-        players_value_label.grid(
-            row=row, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
-        )
-        self._field_widgets.extend([players_name_label, players_value_label])
-        row += 1
-
-        # Idle Timer field (always shown, text varies)
-        idle_name_label = customtkinter.CTkLabel(
-            self, text="Idle Timer:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
-        )
-        idle_name_label.grid(
-            row=row, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
-        )
-        idle_value_label = customtkinter.CTkLabel(
-            self, text=idle_timer_text, font=FONT_BODY, text_color=COLOR_TEXT
-        )
-        idle_value_label.grid(
-            row=row, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
-        )
-        self._field_widgets.extend([idle_name_label, idle_value_label])
-        row += 1
-
-        # Server PID field (conditional - only shown when not None)
-        if server_pid is not None:
-            pid_name_label = customtkinter.CTkLabel(
-                self, text="Server PID:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
-            )
-            pid_name_label.grid(
-                row=row, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
-            )
-            pid_value_label = customtkinter.CTkLabel(
-                self, text=str(server_pid), font=FONT_BODY, text_color=COLOR_TEXT
-            )
-            pid_value_label.grid(
-                row=row, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
-            )
-            self._field_widgets.extend([pid_name_label, pid_value_label])
-            row += 1
-
-        # Uptime field (conditional - only shown when not None)
-        if uptime_seconds is not None:
-            uptime_name_label = customtkinter.CTkLabel(
-                self, text="Uptime:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
-            )
-            uptime_name_label.grid(
-                row=row, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
-            )
-            uptime_value_label = customtkinter.CTkLabel(
-                self, text=f"{uptime_seconds}s", font=FONT_BODY, text_color=COLOR_TEXT
-            )
-            uptime_value_label.grid(
-                row=row, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
-            )
-            self._field_widgets.extend([uptime_name_label, uptime_value_label])
-            row += 1
+        if uptime_should_show:
+            self._uptime_value_label.configure(text=f"{status.uptime_seconds}s")
 
 
 

@@ -904,12 +904,13 @@ class TestStatusDisplay:
     - Shows idle timer format when active (Req 4.3)
     - Shows 'Not active' when idle timer inactive (Req 4.4)
     - Shows PID when available (Req 4.5)
-    - Omits PID when None (Req 4.6)
+    - Hides PID when None (Req 4.6)
     - Shows uptime when available (Req 4.7)
-    - Omits uptime when None (Req 4.8)
+    - Hides uptime when None (Req 4.8)
 
-    Tests use patch on _build_fields to verify update_status() computes
-    the correct display parameters without needing a real tkinter display.
+    Tests verify that update_status() calls configure() on the correct
+    label widgets with the expected text/color values, and that conditional
+    fields are shown/hidden via grid/grid_remove as appropriate.
     """
 
     @pytest.fixture
@@ -920,12 +921,21 @@ class TestStatusDisplay:
         with patch.object(StatusDisplay, "__init__", lambda self, *args, **kwargs: None):
             sd = StatusDisplay.__new__(StatusDisplay)
             sd._idle_timeout_threshold = 600
-            sd._field_widgets = []
+            sd._pid_visible = False
+            sd._uptime_visible = False
+            # Mock the label widgets
+            sd._state_value_label = MagicMock()
+            sd._players_value_label = MagicMock()
+            sd._idle_value_label = MagicMock()
+            sd._pid_name_label = MagicMock()
+            sd._pid_value_label = MagicMock()
+            sd._uptime_name_label = MagicMock()
+            sd._uptime_value_label = MagicMock()
             return sd
 
     def test_update_status_state_uppercase_running(self, status_display):
-        """update_status should pass state as uppercase 'RUNNING'."""
-        from src.gui_interface import StatusDisplay
+        """update_status should configure state label with uppercase 'RUNNING'."""
+        from src.gui_interface import COLOR_ACCENT
         from src.models import WrapperStatus, ServerState
 
         status = WrapperStatus(
@@ -937,18 +947,14 @@ class TestStatusDisplay:
             uptime_seconds=None,
         )
 
-        with patch.object(status_display, "_build_fields") as mock_build:
-            status_display.update_status(status)
-            mock_build.assert_called_once_with(
-                state="RUNNING",
-                player_count=3,
-                idle_timer_text="Not active",
-                server_pid=None,
-                uptime_seconds=None,
-            )
+        status_display.update_status(status)
+        status_display._state_value_label.configure.assert_called_with(
+            text="RUNNING", text_color=COLOR_ACCENT
+        )
 
     def test_update_status_state_uppercase_monitoring(self, status_display):
-        """update_status should pass state as uppercase 'MONITORING'."""
+        """update_status should configure state label with uppercase 'MONITORING'."""
+        from src.gui_interface import COLOR_TEXT
         from src.models import WrapperStatus, ServerState
 
         status = WrapperStatus(
@@ -960,18 +966,14 @@ class TestStatusDisplay:
             uptime_seconds=None,
         )
 
-        with patch.object(status_display, "_build_fields") as mock_build:
-            status_display.update_status(status)
-            mock_build.assert_called_once_with(
-                state="MONITORING",
-                player_count=0,
-                idle_timer_text="Not active",
-                server_pid=None,
-                uptime_seconds=None,
-            )
+        status_display.update_status(status)
+        status_display._state_value_label.configure.assert_called_with(
+            text="MONITORING", text_color=COLOR_TEXT
+        )
 
     def test_update_status_state_uppercase_starting(self, status_display):
-        """update_status should pass state as uppercase 'STARTING'."""
+        """update_status should configure state label with uppercase 'STARTING'."""
+        from src.gui_interface import COLOR_TEXT
         from src.models import WrapperStatus, ServerState
 
         status = WrapperStatus(
@@ -983,18 +985,14 @@ class TestStatusDisplay:
             uptime_seconds=None,
         )
 
-        with patch.object(status_display, "_build_fields") as mock_build:
-            status_display.update_status(status)
-            mock_build.assert_called_once_with(
-                state="STARTING",
-                player_count=0,
-                idle_timer_text="Not active",
-                server_pid=None,
-                uptime_seconds=None,
-            )
+        status_display.update_status(status)
+        status_display._state_value_label.configure.assert_called_with(
+            text="STARTING", text_color=COLOR_TEXT
+        )
 
     def test_update_status_state_uppercase_stopping(self, status_display):
-        """update_status should pass state as uppercase 'STOPPING'."""
+        """update_status should configure state label with uppercase 'STOPPING'."""
+        from src.gui_interface import COLOR_TEXT
         from src.models import WrapperStatus, ServerState
 
         status = WrapperStatus(
@@ -1006,15 +1004,10 @@ class TestStatusDisplay:
             uptime_seconds=None,
         )
 
-        with patch.object(status_display, "_build_fields") as mock_build:
-            status_display.update_status(status)
-            mock_build.assert_called_once_with(
-                state="STOPPING",
-                player_count=0,
-                idle_timer_text="Not active",
-                server_pid=None,
-                uptime_seconds=None,
-            )
+        status_display.update_status(status)
+        status_display._state_value_label.configure.assert_called_with(
+            text="STOPPING", text_color=COLOR_TEXT
+        )
 
     def test_idle_timer_active_format(self, status_display):
         """When idle timer is active, should format as '{elapsed}s elapsed ({threshold}s threshold)'."""
@@ -1025,19 +1018,14 @@ class TestStatusDisplay:
             player_count=5,
             idle_timer_active=True,
             idle_seconds=120,
-            server_pid=1234,
-            uptime_seconds=3600,
+            server_pid=None,
+            uptime_seconds=None,
         )
 
-        with patch.object(status_display, "_build_fields") as mock_build:
-            status_display.update_status(status)
-            mock_build.assert_called_once_with(
-                state="RUNNING",
-                player_count=5,
-                idle_timer_text="120s elapsed (600s threshold)",
-                server_pid=1234,
-                uptime_seconds=3600,
-            )
+        status_display.update_status(status)
+        status_display._idle_value_label.configure.assert_called_with(
+            text="120s elapsed (600s threshold)"
+        )
 
     def test_idle_timer_inactive_text(self, status_display):
         """When idle timer is inactive, should display 'Not active'."""
@@ -1052,18 +1040,13 @@ class TestStatusDisplay:
             uptime_seconds=None,
         )
 
-        with patch.object(status_display, "_build_fields") as mock_build:
-            status_display.update_status(status)
-            mock_build.assert_called_once_with(
-                state="MONITORING",
-                player_count=0,
-                idle_timer_text="Not active",
-                server_pid=None,
-                uptime_seconds=None,
-            )
+        status_display.update_status(status)
+        status_display._idle_value_label.configure.assert_called_with(
+            text="Not active"
+        )
 
-    def test_pid_passed_through_when_available(self, status_display):
-        """When server_pid is not None, it should be passed to _build_fields."""
+    def test_pid_shown_when_available(self, status_display):
+        """When server_pid is not None, PID labels should be grid-placed and value configured."""
         from src.models import WrapperStatus, ServerState
 
         status = WrapperStatus(
@@ -1075,19 +1058,18 @@ class TestStatusDisplay:
             uptime_seconds=None,
         )
 
-        with patch.object(status_display, "_build_fields") as mock_build:
-            status_display.update_status(status)
-            mock_build.assert_called_once_with(
-                state="RUNNING",
-                player_count=2,
-                idle_timer_text="Not active",
-                server_pid=9876,
-                uptime_seconds=None,
-            )
+        status_display.update_status(status)
+        status_display._pid_name_label.grid.assert_called()
+        status_display._pid_value_label.grid.assert_called()
+        status_display._pid_value_label.configure.assert_called_with(text="9876")
+        assert status_display._pid_visible is True
 
-    def test_pid_none_when_unavailable(self, status_display):
-        """When server_pid is None, it should be passed as None to _build_fields."""
+    def test_pid_hidden_when_unavailable(self, status_display):
+        """When server_pid is None, PID labels should not be grid-placed."""
         from src.models import WrapperStatus, ServerState
+
+        # Start with PID visible so we can verify it gets hidden
+        status_display._pid_visible = True
 
         status = WrapperStatus(
             server_state=ServerState.MONITORING,
@@ -1098,12 +1080,13 @@ class TestStatusDisplay:
             uptime_seconds=None,
         )
 
-        with patch.object(status_display, "_build_fields") as mock_build:
-            status_display.update_status(status)
-            assert mock_build.call_args[1]["server_pid"] is None
+        status_display.update_status(status)
+        status_display._pid_name_label.grid_remove.assert_called()
+        status_display._pid_value_label.grid_remove.assert_called()
+        assert status_display._pid_visible is False
 
-    def test_uptime_passed_through_when_available(self, status_display):
-        """When uptime_seconds is not None, it should be passed to _build_fields."""
+    def test_uptime_shown_when_available(self, status_display):
+        """When uptime_seconds is not None, uptime labels should be grid-placed and value configured."""
         from src.models import WrapperStatus, ServerState
 
         status = WrapperStatus(
@@ -1111,23 +1094,22 @@ class TestStatusDisplay:
             player_count=1,
             idle_timer_active=False,
             idle_seconds=0,
-            server_pid=5555,
+            server_pid=None,
             uptime_seconds=7200,
         )
 
-        with patch.object(status_display, "_build_fields") as mock_build:
-            status_display.update_status(status)
-            mock_build.assert_called_once_with(
-                state="RUNNING",
-                player_count=1,
-                idle_timer_text="Not active",
-                server_pid=5555,
-                uptime_seconds=7200,
-            )
+        status_display.update_status(status)
+        status_display._uptime_name_label.grid.assert_called()
+        status_display._uptime_value_label.grid.assert_called()
+        status_display._uptime_value_label.configure.assert_called_with(text="7200s")
+        assert status_display._uptime_visible is True
 
-    def test_uptime_none_when_unavailable(self, status_display):
-        """When uptime_seconds is None, it should be passed as None to _build_fields."""
+    def test_uptime_hidden_when_unavailable(self, status_display):
+        """When uptime_seconds is None, uptime labels should not be grid-placed."""
         from src.models import WrapperStatus, ServerState
+
+        # Start with uptime visible so we can verify it gets hidden
+        status_display._uptime_visible = True
 
         status = WrapperStatus(
             server_state=ServerState.RUNNING,
@@ -1138,9 +1120,10 @@ class TestStatusDisplay:
             uptime_seconds=None,
         )
 
-        with patch.object(status_display, "_build_fields") as mock_build:
-            status_display.update_status(status)
-            assert mock_build.call_args[1]["uptime_seconds"] is None
+        status_display.update_status(status)
+        status_display._uptime_name_label.grid_remove.assert_called()
+        status_display._uptime_value_label.grid_remove.assert_called()
+        assert status_display._uptime_visible is False
 
     def test_idle_timer_active_with_large_values(self, status_display):
         """Idle timer should format correctly with large elapsed/threshold values."""
@@ -1158,18 +1141,14 @@ class TestStatusDisplay:
             uptime_seconds=None,
         )
 
-        with patch.object(status_display, "_build_fields") as mock_build:
-            status_display.update_status(status)
-            mock_build.assert_called_once_with(
-                state="RUNNING",
-                player_count=0,
-                idle_timer_text="900s elapsed (1800s threshold)",
-                server_pid=None,
-                uptime_seconds=None,
-            )
+        status_display.update_status(status)
+        status_display._idle_value_label.configure.assert_called_with(
+            text="900s elapsed (1800s threshold)"
+        )
 
     def test_all_fields_present(self, status_display):
-        """When all optional fields are available, all should be passed through."""
+        """When all optional fields are available, all should be shown and configured."""
+        from src.gui_interface import COLOR_ACCENT
         from src.models import WrapperStatus, ServerState
 
         status = WrapperStatus(
@@ -1181,15 +1160,18 @@ class TestStatusDisplay:
             uptime_seconds=86400,
         )
 
-        with patch.object(status_display, "_build_fields") as mock_build:
-            status_display.update_status(status)
-            mock_build.assert_called_once_with(
-                state="RUNNING",
-                player_count=10,
-                idle_timer_text="45s elapsed (600s threshold)",
-                server_pid=12345,
-                uptime_seconds=86400,
-            )
+        status_display.update_status(status)
+        status_display._state_value_label.configure.assert_called_with(
+            text="RUNNING", text_color=COLOR_ACCENT
+        )
+        status_display._players_value_label.configure.assert_called_with(text="10")
+        status_display._idle_value_label.configure.assert_called_with(
+            text="45s elapsed (600s threshold)"
+        )
+        status_display._pid_value_label.configure.assert_called_with(text="12345")
+        status_display._uptime_value_label.configure.assert_called_with(text="86400s")
+        assert status_display._pid_visible is True
+        assert status_display._uptime_visible is True
 
 
 
