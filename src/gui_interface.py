@@ -33,6 +33,7 @@ from src.gui_theme import (
     COLOR_TEXT,
     COLOR_TEXT_SECONDARY,
     FONT_BODY,
+    FONT_HEADING,
     FONT_MONO,
     FONT_SUBHEADING,
     WIDGET_INNER_SPACING,
@@ -143,6 +144,9 @@ class GuiInterface:
         cp_card = create_card_frame(self._root)
         cp_card.grid(row=0, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=(CARD_OUTER_MARGIN, CARD_OUTER_MARGIN // 2))
         cp_card.columnconfigure(0, weight=1)
+        customtkinter.CTkLabel(
+            cp_card, text="Server Controls", font=FONT_HEADING, text_color=COLOR_TEXT, anchor="w"
+        ).grid(row=0, column=0, sticky="ew", padx=CARD_INNER_PADDING, pady=(CARD_INNER_PADDING, 0))
         self._control_panel = ControlPanel(
             cp_card,
             on_start=lambda: asyncio.create_task(
@@ -155,25 +159,31 @@ class GuiInterface:
                 self._execute_server_operation("restart")
             ),
         )
-        self._control_panel.grid(row=0, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
+        self._control_panel.grid(row=1, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
         # Row 1: Status Display - Real-time status fields
         sd_card = create_card_frame(self._root)
         sd_card.grid(row=1, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
         sd_card.columnconfigure(0, weight=1)
+        customtkinter.CTkLabel(
+            sd_card, text="Server Status", font=FONT_HEADING, text_color=COLOR_TEXT, anchor="w"
+        ).grid(row=0, column=0, sticky="ew", padx=CARD_INNER_PADDING, pady=(CARD_INNER_PADDING, 0))
         self._status_display = StatusDisplay(
             sd_card,
             idle_timeout_threshold=self._config.idle_timeout_seconds,
         )
-        self._status_display.grid(row=0, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
+        self._status_display.grid(row=1, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
         # Row 2: Output Panel - Operational log output
         op_card = create_card_frame(self._root)
         op_card.grid(row=2, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
         op_card.columnconfigure(0, weight=1)
-        op_card.rowconfigure(0, weight=1)
+        op_card.rowconfigure(1, weight=1)
+        customtkinter.CTkLabel(
+            op_card, text="Output Log", font=FONT_HEADING, text_color=COLOR_TEXT, anchor="w"
+        ).grid(row=0, column=0, sticky="ew", padx=CARD_INNER_PADDING, pady=(CARD_INNER_PADDING, 0))
         self._output_panel = OutputPanel(op_card)
-        self._output_panel.grid(row=0, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
+        self._output_panel.grid(row=1, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
         # NotificationBar created early (SettingsPanel needs it), placed at row 5 later
         nb_card = create_card_frame(self._root)
@@ -186,7 +196,10 @@ class GuiInterface:
         sp_card = create_card_frame(self._root)
         sp_card.grid(row=3, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
         sp_card.columnconfigure(0, weight=1)
-        sp_card.rowconfigure(0, weight=1)
+        sp_card.rowconfigure(1, weight=1)
+        customtkinter.CTkLabel(
+            sp_card, text="Server Settings", font=FONT_HEADING, text_color=COLOR_TEXT, anchor="w"
+        ).grid(row=0, column=0, sticky="ew", padx=CARD_INNER_PADDING, pady=(CARD_INNER_PADDING, 0))
         self._settings_panel = SettingsPanel(
             parent=sp_card,
             config=self._config,
@@ -194,7 +207,7 @@ class GuiInterface:
             settings_write_handler=self._settings_write_handler,
             notification_bar=self._notification_bar,
         )
-        self._settings_panel.grid(row=0, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
+        self._settings_panel.grid(row=1, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
         # Row 4: Button frame - Help and Quit buttons
         button_frame = customtkinter.CTkFrame(self._root, fg_color="transparent")
