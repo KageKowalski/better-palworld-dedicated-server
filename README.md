@@ -18,7 +18,7 @@ A lightweight wrapper that manages your Palworld Dedicated Server process on Win
 - Windows
 - Python 3.11+
 - Palworld Dedicated Server installed (via Steam or SteamCMD)
-- RCON enabled in your server settings (`RCONEnabled=True` with `AdminPassword` set)
+- REST API enabled (default in recent versions) with `AdminPassword` set in `PalWorldSettings.ini`
 
 ## Installation
 
@@ -33,13 +33,13 @@ pip install -e .
 ```bash
 palworld-wrapper --server-exe "C:\SteamLibrary\steamapps\common\PalServer\PalServer.exe" ^
                  --settings-file "C:\SteamLibrary\steamapps\common\PalServer\Pal\Saved\Config\WindowsServer\PalWorldSettings.ini" ^
-                 --rcon-password "your_rcon_password"
+                 --admin-password "your_admin_password"
 ```
 
 Or run directly without installing:
 
 ```bash
-python -m src.main --server-exe <path> --settings-file <path> --rcon-password <password>
+python -m src.main --server-exe <path> --settings-file <path> --admin-password <password>
 ```
 
 ### Options
@@ -48,8 +48,8 @@ python -m src.main --server-exe <path> --settings-file <path> --rcon-password <p
 |------|---------|-------------|
 | `--server-exe` | *(required)* | Path to `PalServer.exe` |
 | `--settings-file` | *(required)* | Path to `PalWorldSettings.ini` |
-| `--rcon-password` | `""` | RCON admin password |
-| `--rcon-port` | `25575` | RCON TCP port |
+| `--admin-password` | `""` | Admin password for REST API authentication (max 128 chars) |
+| `--api-port` | `8212` | REST API TCP port (1–65535) |
 | `--game-port` | `8211` | Game UDP port |
 | `--idle-timeout` | `300` | Seconds with 0 players before auto-shutdown |
 | `--poll-interval` | `10` | Seconds between player count checks (1–30) |
@@ -91,10 +91,10 @@ Launch with `--interface console` to use an interactive terminal prompt:
 ## How It Works
 
 1. The wrapper listens for UDP traffic on the game port.
-2. When a player connects, it releases the port, launches the server, and waits for RCON readiness.
-3. While running, it polls RCON for player count.
+2. When a player connects, it releases the port, launches the server, and waits for REST API readiness.
+3. While running, it polls the REST API for player count.
 4. When the last player leaves, the idle timer starts. If no one rejoins, the server shuts down and monitoring resumes.
-5. On the maintenance interval, the wrapper broadcasts a warning, stops the server, optionally runs a SteamCMD update, and restarts.
+5. On the maintenance interval, the wrapper sends an announcement via REST API, stops the server, optionally runs a SteamCMD update, and restarts.
 
 > **Note:** The player whose connection triggers auto-start will need to reconnect once the server finishes launching (~1–2 minutes). The initial packet is consumed by the wrapper to detect intent.
 
@@ -110,6 +110,6 @@ python -m pytest tests/ -v
 | Problem | Solution |
 |---------|----------|
 | Can't bind to port 8211 | Ensure the Palworld server isn't already running. Check for port conflicts. |
-| RCON never connects | Verify `RCONEnabled=True` and `AdminPassword` in `PalWorldSettings.ini` matches `--rcon-password`. |
+| REST API not connecting | Verify `AdminPassword` in `PalWorldSettings.ini` matches `--admin-password`. Check REST API port (default 8212). |
 | Idle timer too aggressive | Increase `--idle-timeout` (e.g., `600` for 10 minutes). |
 | Wrapper exits immediately | Check `wrapper.log` for errors. Verify `--server-exe` and `--settings-file` paths exist. |
