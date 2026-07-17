@@ -694,12 +694,14 @@ class NotificationBar(customtkinter.CTkFrame):
 
         Args:
             parent: The parent tkinter widget (typically the root window or
-                    a container frame).
+                    a container frame). When shown/hidden, the parent card
+                    frame is also toggled to avoid an empty visible container.
         """
         super().__init__(parent, fg_color="transparent")
 
         self._after_id: str | None = None
         self._is_visible: bool = False
+        self._parent_card = parent
 
         # Configure grid columns: message expands, dismiss button fixed
         self.columnconfigure(0, weight=1)
@@ -720,6 +722,7 @@ class NotificationBar(customtkinter.CTkFrame):
 
         # Start hidden since there's no notification to show
         self.grid_remove()
+        self._parent_card.grid_remove()
 
     def show_success(self, message: str) -> None:
         """Display a success notification that auto-dismisses after 5 seconds.
@@ -762,6 +765,7 @@ class NotificationBar(customtkinter.CTkFrame):
     def _show(self) -> None:
         """Make the notification bar visible."""
         if not self._is_visible:
+            self._parent_card.grid()
             self.grid()
             self._is_visible = True
 
@@ -769,6 +773,7 @@ class NotificationBar(customtkinter.CTkFrame):
         """Hide the notification bar."""
         if self._is_visible:
             self.grid_remove()
+            self._parent_card.grid_remove()
             self._is_visible = False
 
     def _cancel_pending_dismiss(self) -> None:

@@ -58,6 +58,10 @@ def notification_bar():
     bar.grid = MagicMock()
     bar.grid_remove = MagicMock()
 
+    # Mock parent card frame (NotificationBar shows/hides its parent card)
+    mock_parent_card = MagicMock()
+    bar._parent_card = mock_parent_card
+
     return bar
 
 
