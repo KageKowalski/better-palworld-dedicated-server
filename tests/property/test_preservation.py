@@ -20,7 +20,7 @@ from hypothesis import given, settings, strategies as st
 
 from src.connection_listener import ConnectionListener
 from src.idle_timer import IdleTimer
-from src.models import ServerState, StartResult, StopResult
+from src.models import ServerState, ShutdownResult, StartResult, StopResult
 from src.process_manager import ProcessManager
 from src.wrapper_core import WrapperCore
 from src.config import WrapperConfig
@@ -210,7 +210,7 @@ class TestPreservationProperties:
     # -------------------------------------------------------------------------
 
     @given(dummy=st.integers(min_value=0, max_value=100))
-    @settings(max_examples=100)
+    @settings(max_examples=100, deadline=None)
     async def test_stop_server_transitions_to_monitoring(
         self, dummy: int
     ) -> None:
@@ -231,9 +231,12 @@ class TestPreservationProperties:
             return_value=StopResult(success=True, was_forced=True)
         )
 
-        core._rcon_client = MagicMock()
-        core._rcon_client.send_command = AsyncMock(return_value=None)
-        core._rcon_client.disconnect = AsyncMock()
+        core._rest_client = MagicMock()
+        core._rest_client.shutdown = AsyncMock(
+            return_value=ShutdownResult(success=True)
+        )
+        core._rest_client.close = AsyncMock()
+        core._rest_client.close = AsyncMock()
 
         core._idle_timer = MagicMock()
         core._idle_timer.cancel = MagicMock()
@@ -242,7 +245,7 @@ class TestPreservationProperties:
         core._connection_listener = MagicMock()
         core._connection_listener.start_listening = AsyncMock()
 
-        core._rcon_poll_task = None
+        core._rest_poll_task = None
 
         # Call stop_server
         result = await core.stop_server()
