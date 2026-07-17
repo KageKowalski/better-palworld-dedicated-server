@@ -148,8 +148,8 @@ def ensure_rest_api_enabled(config: WrapperConfig) -> None:
     """Ensure RESTAPIEnabled=True in PalWorldSettings.ini before starting.
 
     The REST API is required for the wrapper to function. If the setting
-    is False, this function attempts to set it to True. If that fails
-    (e.g., due to file permissions), a warning is printed to stderr.
+    is False, this function attempts to set it to True. Outcomes are logged
+    to the log file only — no console output is produced.
 
     Args:
         config: The wrapper configuration with settings_file_path.
@@ -169,16 +169,15 @@ def ensure_rest_api_enabled(config: WrapperConfig) -> None:
             config.settings_file_path, "RESTAPIEnabled", True
         )
         if result.valid:
-            logger.info("RESTAPIEnabled was False — automatically set to True")
+            logger.debug("RESTAPIEnabled was False — automatically set to True")
         else:
-            msg = (
-                f"WARNING: RESTAPIEnabled is False in {config.settings_file_path} "
-                f"and could not be updated automatically ({result.error_message}). "
-                f"The server's REST API will not be available. "
-                f"Please set RESTAPIEnabled=True manually or run with elevated permissions."
+            logger.error(
+                "RESTAPIEnabled is False in %s and could not be updated "
+                "automatically (%s). Please set RESTAPIEnabled=True manually "
+                "or run with elevated permissions.",
+                config.settings_file_path,
+                result.error_message,
             )
-            logger.error(msg)
-            print(msg, file=sys.stderr)
 
 
 def build_config(args: argparse.Namespace) -> WrapperConfig:
