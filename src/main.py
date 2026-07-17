@@ -144,6 +144,43 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def ensure_rest_api_enabled(config: WrapperConfig) -> None:
+    """Ensure RESTAPIEnabled=True in PalWorldSettings.ini before starting.
+
+    The REST API is required for the wrapper to function. If the setting
+    is False, this function attempts to set it to True. If that fails
+    (e.g., due to file permissions), a warning is printed to stderr.
+
+    Args:
+        config: The wrapper configuration with settings_file_path.
+    """
+    from src.settings_parser import SettingsParser
+
+    settings = SettingsParser.read_settings(config.settings_file_path)
+    if "__error__" in settings:
+        logger.warning(
+            "Could not read settings file to check RESTAPIEnabled: %s",
+            settings["__error__"],
+        )
+        return
+
+    if settings.get("RESTAPIEnabled") is False:
+        result = SettingsParser.write_setting(
+            config.settings_file_path, "RESTAPIEnabled", True
+        )
+        if result.valid:
+            logger.info("RESTAPIEnabled was False — automatically set to True")
+        else:
+            msg = (
+                f"WARNING: RESTAPIEnabled is False in {config.settings_file_path} "
+                f"and could not be updated automatically ({result.error_message}). "
+                f"The server's REST API will not be available. "
+                f"Please set RESTAPIEnabled=True manually or run with elevated permissions."
+            )
+            logger.error(msg)
+            print(msg, file=sys.stderr)
+
+
 def build_config(args: argparse.Namespace) -> WrapperConfig:
     """Build a WrapperConfig from parsed command-line arguments.
 
@@ -322,6 +359,9 @@ def main(argv: list[str] | None = None) -> None:
         logger.error("Unexpected error during startup: %s", e, exc_info=True)
         print(f"Startup error: {e}", file=sys.stderr)
         sys.exit(1)
+
+    # Ensure RESTAPIEnabled=True before anything else
+    ensure_rest_api_enabled(config)
 
     # Check if we need to detach and respawn as a GUI process (Req 1.1, 6.1-6.3)
     if launcher.should_detach(args.interface, args.detached):
