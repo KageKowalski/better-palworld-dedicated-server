@@ -23,9 +23,11 @@ from src.config import WrapperConfig
 from src.gui_theme import (
     BUTTON_CORNER_RADIUS,
     COLOR_ACCENT,
+    COLOR_ALERT,
     COLOR_DISABLED,
     COLOR_INPUT_BG,
     COLOR_PRIMARY,
+    COLOR_SUCCESS,
     COLOR_TEXT,
     COLOR_TEXT_SECONDARY,
     FONT_BODY,
@@ -649,13 +651,13 @@ class OutputPanel(customtkinter.CTkFrame):
         self._text_widget.configure(state="disabled")
 
 
-class NotificationBar(ttk.Frame):
+class NotificationBar(customtkinter.CTkFrame):
     """Status notification bar at the bottom of the main window.
 
     Success messages auto-dismiss after 5 seconds.
     Error messages persist until user dismisses them.
 
-    The bar is hidden when there is no active notification (uses pack_forget()).
+    The bar is hidden when there is no active notification (uses grid_remove()).
     Tracks the current after() callback ID so it can be cancelled if a new
     notification replaces an old one.
     """
@@ -667,23 +669,30 @@ class NotificationBar(ttk.Frame):
             parent: The parent tkinter widget (typically the root window or
                     a container frame).
         """
-        super().__init__(parent)
+        super().__init__(parent, fg_color="transparent")
 
         self._after_id: str | None = None
         self._is_visible: bool = False
 
-        # Message label - takes up most of the horizontal space
-        self._message_label = ttk.Label(self, text="", anchor="w")
-        self._message_label.pack(side="left", fill="x", expand=True, padx=(5, 0))
+        # Configure grid columns: message expands, dismiss button fixed
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=0)
 
-        # Dismiss button [x]
-        self._dismiss_button = ttk.Button(
-            self, text="\u00d7", width=3, command=self.dismiss
+        # Message label - takes up most of the horizontal space
+        self._message_label = customtkinter.CTkLabel(
+            self, text="", anchor="w", text_color=COLOR_TEXT, font=FONT_BODY
         )
-        self._dismiss_button.pack(side="right", padx=(0, 5))
+        self._message_label.grid(row=0, column=0, sticky="ew")
+
+        # Dismiss button [×]
+        self._dismiss_button = customtkinter.CTkButton(
+            self, text="\u00d7", width=30, fg_color="transparent",
+            command=self.dismiss
+        )
+        self._dismiss_button.grid(row=0, column=1)
 
         # Start hidden since there's no notification to show
-        self.pack_forget()
+        self.grid_remove()
 
     def show_success(self, message: str) -> None:
         """Display a success notification that auto-dismisses after 5 seconds.
@@ -695,7 +704,7 @@ class NotificationBar(ttk.Frame):
             message: The success message to display.
         """
         self._cancel_pending_dismiss()
-        self._message_label.configure(text=message, foreground="green")
+        self._message_label.configure(text=message, text_color=COLOR_SUCCESS)
         self._show()
 
         # Schedule auto-dismiss after 5 seconds (5000 ms)
@@ -711,7 +720,7 @@ class NotificationBar(ttk.Frame):
             message: The error message to display.
         """
         self._cancel_pending_dismiss()
-        self._message_label.configure(text=message, foreground="red")
+        self._message_label.configure(text=message, text_color=COLOR_ALERT)
         self._show()
 
     def dismiss(self) -> None:
@@ -726,13 +735,13 @@ class NotificationBar(ttk.Frame):
     def _show(self) -> None:
         """Make the notification bar visible."""
         if not self._is_visible:
-            self.pack(side="bottom", fill="x", pady=(5, 0))
+            self.grid()
             self._is_visible = True
 
     def _hide(self) -> None:
         """Hide the notification bar."""
         if self._is_visible:
-            self.pack_forget()
+            self.grid_remove()
             self._is_visible = False
 
     def _cancel_pending_dismiss(self) -> None:

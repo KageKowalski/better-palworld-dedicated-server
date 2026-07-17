@@ -5,9 +5,11 @@ which would cause process hangs on Windows due to customtkinter's Tcl/Tk
 C-library cleanup issues.
 """
 
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
+
+from src.gui_theme import COLOR_ALERT, COLOR_SUCCESS
 
 
 @pytest.fixture
@@ -27,8 +29,8 @@ def notification_bar():
     bar._after_id = None
     bar._is_visible = False
 
-    # Mock message label (tracks text and foreground via configure)
-    label_state = {"text": "", "foreground": ""}
+    # Mock message label (tracks text and text_color via configure)
+    label_state = {"text": "", "text_color": ""}
     mock_label = MagicMock()
     mock_label.configure = lambda **kwargs: label_state.update(kwargs)
     mock_label.cget = lambda key: label_state.get(key, "")
@@ -52,9 +54,9 @@ def notification_bar():
     bar.winfo_toplevel = lambda: mock_toplevel
     bar._mock_toplevel = mock_toplevel
 
-    # Mock pack/pack_forget for visibility tracking
-    bar.pack = MagicMock()
-    bar.pack_forget = MagicMock()
+    # Mock grid/grid_remove for visibility tracking
+    bar.grid = MagicMock()
+    bar.grid_remove = MagicMock()
 
     return bar
 
@@ -92,10 +94,10 @@ class TestShowSuccess:
         notification_bar.show_success("Server started successfully")
         assert notification_bar._label_state["text"] == "Server started successfully"
 
-    def test_sets_green_foreground(self, notification_bar):
-        """show_success should set green text color for success messages."""
+    def test_sets_success_text_color(self, notification_bar):
+        """show_success should set COLOR_SUCCESS text color for success messages."""
         notification_bar.show_success("Success!")
-        assert notification_bar._label_state["foreground"] == "green"
+        assert notification_bar._label_state["text_color"] == COLOR_SUCCESS
 
     def test_schedules_auto_dismiss(self, notification_bar):
         """show_success should schedule an auto-dismiss callback."""
@@ -107,7 +109,7 @@ class TestShowSuccess:
         notification_bar.show_error("Error first")
         notification_bar.show_success("Now success")
         assert notification_bar._label_state["text"] == "Now success"
-        assert notification_bar._label_state["foreground"] == "green"
+        assert notification_bar._label_state["text_color"] == COLOR_SUCCESS
 
     def test_cancels_previous_auto_dismiss(self, notification_bar):
         """show_success should cancel any previous auto-dismiss callback."""
@@ -125,6 +127,11 @@ class TestShowSuccess:
         assert notification_bar._is_visible is False
         assert notification_bar._after_id is None
 
+    def test_show_uses_grid(self, notification_bar):
+        """show_success should use grid() to make the bar visible."""
+        notification_bar.show_success("Test")
+        notification_bar.grid.assert_called()
+
 
 class TestShowError:
     """Tests for NotificationBar.show_error()."""
@@ -139,10 +146,10 @@ class TestShowError:
         notification_bar.show_error("Connection failed")
         assert notification_bar._label_state["text"] == "Connection failed"
 
-    def test_sets_red_foreground(self, notification_bar):
-        """show_error should set red text color for error messages."""
+    def test_sets_alert_text_color(self, notification_bar):
+        """show_error should set COLOR_ALERT text color for error messages."""
         notification_bar.show_error("Error!")
-        assert notification_bar._label_state["foreground"] == "red"
+        assert notification_bar._label_state["text_color"] == COLOR_ALERT
 
     def test_no_auto_dismiss(self, notification_bar):
         """show_error should NOT schedule an auto-dismiss callback."""
@@ -154,9 +161,14 @@ class TestShowError:
         notification_bar.show_success("Was success")
         notification_bar.show_error("Now error")
         assert notification_bar._label_state["text"] == "Now error"
-        assert notification_bar._label_state["foreground"] == "red"
+        assert notification_bar._label_state["text_color"] == COLOR_ALERT
         # Previous auto-dismiss should be cancelled
         assert notification_bar._after_id is None
+
+    def test_show_uses_grid(self, notification_bar):
+        """show_error should use grid() to make the bar visible."""
+        notification_bar.show_error("Test error")
+        notification_bar.grid.assert_called()
 
 
 class TestDismiss:
@@ -186,3 +198,9 @@ class TestDismiss:
         notification_bar.show_error("Error to dismiss")
         notification_bar.dismiss()
         assert notification_bar._is_visible is False
+
+    def test_hide_uses_grid_remove(self, notification_bar):
+        """dismiss should use grid_remove() to hide the bar."""
+        notification_bar.show_success("Dismiss me")
+        notification_bar.dismiss()
+        notification_bar.grid_remove.assert_called()
