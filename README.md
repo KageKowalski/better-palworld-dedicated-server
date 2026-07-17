@@ -20,6 +20,13 @@ A lightweight wrapper that manages your Palworld Dedicated Server process on Win
 - Palworld Dedicated Server installed (via Steam or SteamCMD)
 - REST API enabled (default in recent versions) with `AdminPassword` set in `PalWorldSettings.ini`
 
+### Python Dependencies
+
+- `aiohttp` — Async HTTP client for REST API communication
+- `customtkinter` — Modern themed GUI widget library (dark mode, rounded corners)
+
+Both are installed automatically via `pip install -e .`
+
 ## Installation
 
 ```bash

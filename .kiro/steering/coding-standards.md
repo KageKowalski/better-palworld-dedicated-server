@@ -14,7 +14,7 @@
 - Prefer `X | None` over `Optional[X]`
 - Prefer `list[X]` over `List[X]` (use lowercase generics)
 - Import order: stdlib → third-party → local (`src.*`)
-- Use `logging.getLogger(__name__)` per module — never print for operational output except in ManagementInterface (console mode). GUI output uses tkinter widgets (Labels, Text, etc.) rather than stdout
+- Use `logging.getLogger(__name__)` per module — never print for operational output except in ManagementInterface (console mode). GUI output uses CustomTkinter widgets (CTkLabel, CTkTextbox, etc.) rather than stdout
 
 ## Architecture Patterns
 
@@ -23,9 +23,9 @@
 - The `WrapperCore` is the only class that holds references to all components
 - Result types (`StartResult`, `StopResult`, etc.) are returned instead of raising exceptions for expected failures
 - Unexpected exceptions are caught at component boundaries, logged, and the wrapper continues running
-- **GUI widgets** are implemented as `ttk.LabelFrame` subclasses (one class per visual section: `ControlPanel`, `StatusDisplay`, `SettingsPanel`, `NotificationBar`)
+- **GUI widgets** are implemented as `customtkinter.CTkFrame` subclasses (one class per visual section: `ControlPanel`, `StatusDisplay`, `OutputPanel`, `SettingsPanel`, `NotificationBar`), styled via the Theme_Engine module (`src/gui_theme.py`). All layout uses `.grid()` exclusively — no `.pack()` or `.place()`.
 - **Cooperative async pattern** — The GUI's async `run()` method calls `root.update()` every ~33ms and yields control to the asyncio event loop via `await asyncio.sleep(0.033)`. Never use tkinter's blocking `mainloop()`
-- **GUI dialogs** (e.g., `HelpDialog`) extend `tk.Toplevel` for modal behavior
+- **GUI dialogs** (e.g., `HelpDialog`) extend `customtkinter.CTkToplevel` for modal behavior
 
 ## Error Handling
 

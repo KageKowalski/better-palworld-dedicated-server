@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A Python wrapper that sits around the Palworld Dedicated Server (`PalServer.exe`) on Windows. It monitors for player connections, auto-starts the server when someone tries to join, and auto-stops it when idle — conserving system resources. It provides a dual-interface architecture: a tkinter-based GUI (default) and a console/CLI interface (secondary fallback). The GUI features a unified Server Settings panel that shows all settings with descriptions, allowed values, defaults, and current values in one searchable/filterable view with inline editing. In GUI mode, the wrapper automatically detaches from the launching console, allowing the PowerShell window to be closed without affecting the running GUI application.
+A Python wrapper that sits around the Palworld Dedicated Server (`PalServer.exe`) on Windows. It monitors for player connections, auto-starts the server when someone tries to join, and auto-stops it when idle — conserving system resources. It provides a dual-interface architecture: a CustomTkinter-based GUI (default) and a console/CLI interface (secondary fallback). The GUI features a unified Server Settings panel that shows all settings with descriptions, allowed values, defaults, and current values in one searchable/filterable view with inline editing. In GUI mode, the wrapper automatically detaches from the launching console, allowing the PowerShell window to be closed without affecting the running GUI application.
 
 ## Architecture Overview
 
@@ -12,7 +12,7 @@ The wrapper is a **state machine** with four states:
 - **RUNNING** — Server active, REST API polling for player count (initial connection retries with backoff), idle timer tracking
 - **STOPPING** — Graceful shutdown in progress (30s timeout before force kill)
 
-**Interface mode** is selectable via `--interface gui|console` (default: `gui`). The GUI uses tkinter with cooperative async scheduling; the console interface reads from stdin. Both interfaces call the same WrapperCore API.
+**Interface mode** is selectable via `--interface gui|console` (default: `gui`). The GUI uses CustomTkinter (a themed tkinter extension with dark mode and modern widgets) with cooperative async scheduling; the console interface reads from stdin. Both interfaces call the same WrapperCore API.
 
 **Console detachment (GUI mode):** On Windows, when launched in GUI mode with an attached console, the launcher automatically re-spawns the wrapper as a detached process (using `pythonw.exe` if available, with `CREATE_NO_WINDOW | DETACHED_PROCESS` flags) and the original process exits. A hidden `--detached` flag prevents infinite re-spawn loops. The detached GUI process ignores `CTRL_CLOSE_EVENT` via `signal.SIGBREAK` handling.
 
@@ -26,8 +26,9 @@ The wrapper is a **state machine** with four states:
 | `src/rest_client.py` | HTTP client for Palworld REST API (aiohttp, Basic Auth, typed result dataclasses) |
 | `src/idle_timer.py` | Countdown timer that triggers shutdown |
 | `src/settings_parser.py` | PalWorldSettings.ini read/write/validate; `SETTING_DEFINITIONS` dict with all ~119 known server parameters (types, ranges, defaults, categories); `SETTING_CATEGORIES` list for canonical display order; `raw_string` flag controls unquoted write formatting for enum/list values |
-| `src/gui_interface.py` | Tkinter-based GUI management interface — cooperative async scheduling with `root.update()` every ~33ms, widgets as `ttk.LabelFrame` subclasses, includes OutputPanel for log display, SettingsPanel for unified settings view/edit |
-| `src/settings_panel.py` | Unified SettingsPanel — `ttk.LabelFrame` subclass with search/filter, category-grouped display with bold headers (Performances, Server management, Features, Game balances), scrollable SettingRow widgets, inline editing via Apply buttons, and pending changes indicator |
+| `src/gui_interface.py` | CustomTkinter-based GUI management interface — cooperative async scheduling with `root.update()` every ~33ms, widgets as `customtkinter.CTkFrame` subclasses with grid layout, Card_Frame visual containers, Palworld-branded color palette via Theme_Engine. Includes OutputPanel (CTkTextbox log), StatusDisplay, ControlPanel, NotificationBar, and HelpDialog (CTkToplevel) |
+| `src/settings_panel.py` | `customtkinter.CTkFrame` subclass with CTkScrollableFrame, CTkEntry search with placeholder, category-grouped display with CTkLabel headers, scrollable SettingRow widgets (CTkFrame), inline editing via CTkButton Apply buttons, and pending changes indicator |
+| `src/gui_theme.py` | Theme_Engine — module-level constants for Palworld palette colors, font families/sizes/tuples, spacing/layout values, and `create_card_frame()` factory function. Single source of truth for all visual styling across GUI widgets |
 | `src/settings_helpers.py` | Pure formatting functions for setting metadata display (`format_allowed_values`, `format_default_value`, `format_current_value`, `values_differ`, `get_input_control_type`) |
 | `src/management_interface.py` | Interactive CLI (stdin commands), password masking; delegates validation to `src/validation.py` |
 | `src/validation.py` | Shared input validation and auto-correction logic (`validate_and_correct()`, `CorrectionResult` dataclass, `is_password_setting()`) — used by both GUI and console interfaces |
@@ -48,7 +49,7 @@ The wrapper is a **state machine** with four states:
 6. **Retry with backoff** — UDP port binding and REST API initial connection both use retry loops with exponential backoff to handle transient failures (OS socket cleanup delays, slow server initialization)
 7. **Validation at the presentation layer** — Input validation and auto-correction lives in the shared `src/validation.py` module (used by both GUI and console), while SettingsParser handles raw file I/O formatting
 8. **Password masking at display time** — Password values are stored unmasked in the file but displayed as `********` in both GUI settings view and console `settings` command output
-9. **Tkinter cooperative async scheduling** — The GUI integrates with asyncio by calling `root.update()` every ~33ms from an asyncio coroutine instead of running tkinter's blocking `mainloop()`, ensuring WrapperCore background tasks are never starved
+9. **CustomTkinter cooperative async scheduling** — The GUI uses `customtkinter.CTk` (which extends tk.Tk internally) and integrates with asyncio by calling `root.update()` every ~33ms from an asyncio coroutine instead of running CustomTkinter's blocking `mainloop()`, ensuring WrapperCore background tasks are never starved
 10. **Shared validation module** — Validation logic extracted to `src/validation.py` so both GUI and console interfaces produce identical validation/auto-correction behavior without code duplication
 11. **Dual-interface architecture** — GUI is the default interface; console is the secondary fallback. Both share the same WrapperCore API and validation logic, differing only in presentation
 12. **Console detachment via launcher** — In GUI mode on Windows, `src/launcher.py` re-spawns the process as a detached child using `pythonw.exe` (or `python.exe` with `CREATE_NO_WINDOW | DETACHED_PROCESS` flags as fallback), then exits. A hidden `--detached` flag prevents infinite re-spawn loops
@@ -58,6 +59,7 @@ The wrapper is a **state machine** with four states:
 ## External Dependencies
 
 - `aiohttp` — Async HTTP client for REST API communication (native asyncio, connection pooling)
+- `customtkinter` — Modern themed tkinter widget library with dark mode support, rounded corners, and built-in scrollable frames
 - Palworld Dedicated Server uses `PalWorldSettings.ini` with a non-standard single-line `OptionSettings=(key=value,...)` format
 
 ## Configuration Defaults
