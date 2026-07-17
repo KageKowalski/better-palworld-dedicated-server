@@ -18,14 +18,14 @@ class WrapperConfig:
 
     # Network
     game_port: int = 8211  # UDP port for game connections
-    rcon_port: int = 25575  # TCP port for RCON
-    rcon_password: str = ""  # RCON admin password
+    api_port: int = 8212  # REST API port (replaces rcon_port)
+    admin_password: str = ""  # Admin password for REST API (replaces rcon_password)
 
     # Timing
     idle_timeout_seconds: int = 300  # Seconds before idle shutdown
     start_timeout_seconds: int = 120  # Max wait for server startup
     stop_timeout_seconds: int = 30  # Max wait for graceful shutdown
-    rcon_poll_interval_seconds: int = 10  # Seconds between RCON queries
+    poll_interval_seconds: int = 10  # Seconds between REST API polls (replaces rcon_poll_interval_seconds)
 
     # Logging
     log_file_path: Path = field(default_factory=lambda: Path("wrapper.log"))
@@ -45,10 +45,22 @@ class WrapperConfig:
             ValueError: If any configuration value is outside its valid range
                 or has an incorrect type.
         """
-        if self.rcon_poll_interval_seconds < 1 or self.rcon_poll_interval_seconds > 30:
+        if self.api_port < 1 or self.api_port > 65535:
             raise ValueError(
-                f"rcon_poll_interval_seconds must be between 1 and 30, "
-                f"got {self.rcon_poll_interval_seconds}"
+                f"api_port must be between 1 and 65535, "
+                f"got {self.api_port}"
+            )
+
+        if len(self.admin_password) > 128:
+            raise ValueError(
+                f"admin_password must be at most 128 characters, "
+                f"got {len(self.admin_password)}"
+            )
+
+        if self.poll_interval_seconds < 1 or self.poll_interval_seconds > 30:
+            raise ValueError(
+                f"poll_interval_seconds must be between 1 and 30, "
+                f"got {self.poll_interval_seconds}"
             )
 
         if not isinstance(self.maintenance_interval_seconds, int):

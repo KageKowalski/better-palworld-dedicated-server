@@ -24,17 +24,17 @@ class TestWrapperConfigDefaults:
         )
         assert config.game_port == 8211
 
-    def test_default_rcon_port(self):
+    def test_default_api_port(self):
         config = WrapperConfig(
             server_exe_path=Path("."), settings_file_path=Path(".")
         )
-        assert config.rcon_port == 25575
+        assert config.api_port == 8212
 
-    def test_default_rcon_password(self):
+    def test_default_admin_password(self):
         config = WrapperConfig(
             server_exe_path=Path("."), settings_file_path=Path(".")
         )
-        assert config.rcon_password == ""
+        assert config.admin_password == ""
 
     def test_default_idle_timeout(self):
         config = WrapperConfig(
@@ -54,11 +54,11 @@ class TestWrapperConfigDefaults:
         )
         assert config.stop_timeout_seconds == 30
 
-    def test_default_rcon_poll_interval(self):
+    def test_default_poll_interval(self):
         config = WrapperConfig(
             server_exe_path=Path("."), settings_file_path=Path(".")
         )
-        assert config.rcon_poll_interval_seconds == 10
+        assert config.poll_interval_seconds == 10
 
     def test_default_log_file_path(self):
         config = WrapperConfig(
@@ -104,13 +104,78 @@ class TestWrapperConfigDefaults:
 
 
 class TestWrapperConfigValidation:
-    """Test validation of rcon_poll_interval_seconds."""
+    """Test validation of api_port, admin_password, and poll_interval_seconds."""
+
+    # api_port validation
+
+    def test_valid_api_port_lower_bound(self):
+        config = WrapperConfig(
+            server_exe_path=Path("."),
+            settings_file_path=Path("."),
+            api_port=1,
+        )
+        config.validate()  # Should not raise
+
+    def test_valid_api_port_upper_bound(self):
+        config = WrapperConfig(
+            server_exe_path=Path("."),
+            settings_file_path=Path("."),
+            api_port=65535,
+        )
+        config.validate()  # Should not raise
+
+    def test_invalid_api_port_below_range(self):
+        config = WrapperConfig(
+            server_exe_path=Path("."),
+            settings_file_path=Path("."),
+            api_port=0,
+        )
+        with pytest.raises(ValueError, match="api_port must be between 1 and 65535"):
+            config.validate()
+
+    def test_invalid_api_port_above_range(self):
+        config = WrapperConfig(
+            server_exe_path=Path("."),
+            settings_file_path=Path("."),
+            api_port=65536,
+        )
+        with pytest.raises(ValueError, match="api_port must be between 1 and 65535"):
+            config.validate()
+
+    # admin_password validation
+
+    def test_valid_admin_password_empty(self):
+        config = WrapperConfig(
+            server_exe_path=Path("."),
+            settings_file_path=Path("."),
+            admin_password="",
+        )
+        config.validate()  # Should not raise
+
+    def test_valid_admin_password_max_length(self):
+        config = WrapperConfig(
+            server_exe_path=Path("."),
+            settings_file_path=Path("."),
+            admin_password="a" * 128,
+        )
+        config.validate()  # Should not raise
+
+    def test_invalid_admin_password_too_long(self):
+        config = WrapperConfig(
+            server_exe_path=Path("."),
+            settings_file_path=Path("."),
+            admin_password="a" * 129,
+        )
+        with pytest.raises(ValueError, match="admin_password must be at most 128 characters"):
+            config.validate()
+
+    # poll_interval_seconds validation
 
     def test_valid_interval_lower_bound(self):
         config = WrapperConfig(
             server_exe_path=Path("."),
             settings_file_path=Path("."),
-            rcon_poll_interval_seconds=1,
+            poll_interval_seconds=1,
         )
         config.validate()  # Should not raise
 
@@ -118,7 +183,7 @@ class TestWrapperConfigValidation:
         config = WrapperConfig(
             server_exe_path=Path("."),
             settings_file_path=Path("."),
-            rcon_poll_interval_seconds=30,
+            poll_interval_seconds=30,
         )
         config.validate()  # Should not raise
 
@@ -126,7 +191,7 @@ class TestWrapperConfigValidation:
         config = WrapperConfig(
             server_exe_path=Path("."),
             settings_file_path=Path("."),
-            rcon_poll_interval_seconds=15,
+            poll_interval_seconds=15,
         )
         config.validate()  # Should not raise
 
@@ -134,25 +199,25 @@ class TestWrapperConfigValidation:
         config = WrapperConfig(
             server_exe_path=Path("."),
             settings_file_path=Path("."),
-            rcon_poll_interval_seconds=0,
+            poll_interval_seconds=0,
         )
-        with pytest.raises(ValueError, match="rcon_poll_interval_seconds must be between 1 and 30"):
+        with pytest.raises(ValueError, match="poll_interval_seconds must be between 1 and 30"):
             config.validate()
 
     def test_invalid_interval_above_range(self):
         config = WrapperConfig(
             server_exe_path=Path("."),
             settings_file_path=Path("."),
-            rcon_poll_interval_seconds=31,
+            poll_interval_seconds=31,
         )
-        with pytest.raises(ValueError, match="rcon_poll_interval_seconds must be between 1 and 30"):
+        with pytest.raises(ValueError, match="poll_interval_seconds must be between 1 and 30"):
             config.validate()
 
     def test_invalid_interval_negative(self):
         config = WrapperConfig(
             server_exe_path=Path("."),
             settings_file_path=Path("."),
-            rcon_poll_interval_seconds=-5,
+            poll_interval_seconds=-5,
         )
         with pytest.raises(ValueError):
             config.validate()
