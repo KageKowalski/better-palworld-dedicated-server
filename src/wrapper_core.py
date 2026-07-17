@@ -57,8 +57,8 @@ class WrapperCore:
         self._process_manager = ProcessManager(on_crash=self.handle_server_crashed)
         self._rcon_client = RconClient(
             host="127.0.0.1",
-            port=config.rcon_port,
-            password=config.rcon_password,
+            port=config.api_port,
+            password=config.admin_password,
         )
         self._idle_timer = IdleTimer(
             timeout_seconds=config.idle_timeout_seconds,

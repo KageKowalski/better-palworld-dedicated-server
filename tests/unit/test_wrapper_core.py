@@ -23,7 +23,7 @@ def _make_config(tmp_path: Path) -> WrapperConfig:
         idle_timeout_seconds=1,
         start_timeout_seconds=5,
         stop_timeout_seconds=5,
-        rcon_poll_interval_seconds=1,
+        poll_interval_seconds=1,
     )
 
 

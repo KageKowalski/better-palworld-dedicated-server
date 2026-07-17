@@ -32,12 +32,12 @@ def _make_config() -> WrapperConfig:
         server_exe_path=Path("PalServer.exe"),
         settings_file_path=Path("PalWorldSettings.ini"),
         game_port=8211,
-        rcon_port=25575,
-        rcon_password="test",
+        api_port=8212,
+        admin_password="test",
         idle_timeout_seconds=600,
         start_timeout_seconds=120,
         stop_timeout_seconds=30,
-        rcon_poll_interval_seconds=10,
+        poll_interval_seconds=10,
     )
 
 
