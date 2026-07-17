@@ -96,3 +96,62 @@ class StateTransitionEvent:
     from_state: ServerState
     to_state: ServerState
     reason: str
+
+
+@dataclass
+class MetricsResult:
+    """Result of a REST API metrics query."""
+
+    success: bool
+    player_count: int = 0
+    error_message: str | None = None
+
+
+@dataclass
+class InfoResult:
+    """Result of a REST API info query (connectivity check)."""
+
+    success: bool
+    version: str = ""
+    server_name: str = ""
+    description: str = ""
+    error_message: str | None = None
+
+
+@dataclass
+class PlayerInfo:
+    """A single player's information from the REST API."""
+
+    name: str = ""
+    playerid: str = ""
+    userid: str = ""
+    ip: str = ""
+    ping: float = 0.0
+    location_x: float = 0.0
+    location_y: float = 0.0
+    level: int = 0
+
+
+@dataclass
+class PlayersResult:
+    """Result of a REST API players query."""
+
+    success: bool
+    players: list[PlayerInfo] = field(default_factory=list)
+    error_message: str | None = None
+
+
+@dataclass
+class AnnounceResult:
+    """Result of a REST API announce (broadcast) request."""
+
+    success: bool
+    error_message: str | None = None
+
+
+@dataclass
+class ShutdownResult:
+    """Result of a REST API shutdown request."""
+
+    success: bool
+    error_message: str | None = None
