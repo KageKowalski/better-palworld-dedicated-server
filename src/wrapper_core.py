@@ -24,6 +24,7 @@ from src.models import (
 from src.pending_settings import ApplyResult, PendingSettingsQueue
 from src.process_manager import ProcessManager
 from src.rcon_client import RconClient
+from src.rest_client import RestClient
 from src.settings_parser import SettingsParser
 from src.steam_updater import SteamUpdater
 
@@ -48,14 +49,19 @@ class WrapperCore:
         self._player_count = 0
         self._running_since: float | None = None
         self._quit_event = asyncio.Event()
-        self._rcon_poll_task: asyncio.Task | None = None
-        self._consecutive_rcon_failures = 0
+        self._rest_poll_task: asyncio.Task | None = None
+        self._consecutive_rest_failures = 0
 
         # Initialize components
         self._logger = WrapperLogger()
         self._settings_parser = SettingsParser()
         self._process_manager = ProcessManager(on_crash=self.handle_server_crashed)
         self._rcon_client = RconClient(
+            host="127.0.0.1",
+            port=config.api_port,
+            password=config.admin_password,
+        )
+        self._rest_client = RestClient(
             host="127.0.0.1",
             port=config.api_port,
             password=config.admin_password,
@@ -183,22 +189,22 @@ class WrapperCore:
             await self._connection_listener.start_listening()
             return
 
-        # Wait for the server RCON port to be ready (reliable TCP indicator)
+        # Wait for the server REST API port to be ready (reliable TCP indicator)
         port_ready = await self._process_manager.wait_for_port(
-            port=self._config.rcon_port,
+            port=self._config.api_port,
             timeout=self._config.start_timeout_seconds,
         )
 
         if not port_ready:
             logger.error(
-                "Server RCON not ready on port %d within %ds",
-                self._config.rcon_port,
+                "Server REST API not ready on port %d within %ds",
+                self._config.api_port,
                 self._config.start_timeout_seconds,
             )
             self._logger.log_error(
                 "Server startup timeout",
                 Exception(
-                    f"Server RCON not ready on port {self._config.rcon_port} "
+                    f"Server REST API not ready on port {self._config.api_port} "
                     f"within {self._config.start_timeout_seconds}s"
                 ),
             )
@@ -249,13 +255,13 @@ class WrapperCore:
         self._logger.log_state_transition(self._state.value, "monitoring (crash)")
 
         # Cancel ongoing tasks
-        self._cancel_rcon_polling()
+        self._cancel_rest_polling()
         self._idle_timer.cancel()
 
         # Reset state
         self._player_count = 0
         self._running_since = None
-        self._consecutive_rcon_failures = 0
+        self._consecutive_rest_failures = 0
 
         # Disconnect RCON
         await self._rcon_client.disconnect()
@@ -302,15 +308,15 @@ class WrapperCore:
             await self._connection_listener.start_listening()
             return result
 
-        # Wait for RCON port readiness (reliable TCP indicator)
+        # Wait for REST API port readiness (reliable TCP indicator)
         port_ready = await self._process_manager.wait_for_port(
-            port=self._config.rcon_port,
+            port=self._config.api_port,
             timeout=self._config.start_timeout_seconds,
         )
 
         if not port_ready:
             error_msg = (
-                f"Server RCON not ready on port {self._config.rcon_port} "
+                f"Server REST API not ready on port {self._config.api_port} "
                 f"within {self._config.start_timeout_seconds}s"
             )
             logger.error(error_msg)
@@ -345,7 +351,7 @@ class WrapperCore:
         self._transition_to(ServerState.STOPPING, "Stop command issued")
 
         # Cancel RCON polling and idle timer
-        self._cancel_rcon_polling()
+        self._cancel_rest_polling()
         self._idle_timer.cancel()
 
         # Send RCON Shutdown command for graceful save-and-exit before
@@ -367,7 +373,7 @@ class WrapperCore:
         # Reset state
         self._player_count = 0
         self._running_since = None
-        self._consecutive_rcon_failures = 0
+        self._consecutive_rest_failures = 0
 
         # Transition to MONITORING
         self._transition_to(ServerState.MONITORING, "Server stopped")
@@ -502,7 +508,7 @@ class WrapperCore:
         self._maintenance_in_progress = True
         self._idle_timer.cancel()
         self._maintenance_timer.cancel()
-        self._cancel_rcon_polling()
+        self._cancel_rest_polling()
 
         await self._run_maintenance_cycle()
 
@@ -582,16 +588,16 @@ class WrapperCore:
             await self._connection_listener.start_listening()
             return
 
-        # Wait for RCON port readiness
+        # Wait for REST API port readiness
         port_ready = await self._process_manager.wait_for_port(
-            port=self._config.rcon_port,
+            port=self._config.api_port,
             timeout=self._config.start_timeout_seconds,
         )
 
         if not port_ready:
             logger.error(
-                "Server RCON not ready on port %d within %ds after maintenance",
-                self._config.rcon_port,
+                "Server REST API not ready on port %d within %ds after maintenance",
+                self._config.api_port,
                 self._config.start_timeout_seconds,
             )
             await self._process_manager.stop_server(
@@ -616,8 +622,8 @@ class WrapperCore:
         # Clear maintenance flag
         self._maintenance_in_progress = False
 
-        # Restart RCON polling
-        self._start_rcon_polling()
+        # Restart REST polling
+        self._start_rest_polling()
 
         # Restart idle timer (no players after fresh start)
         await self._idle_timer.start()
@@ -654,8 +660,8 @@ class WrapperCore:
         # Initialize player count to zero (Req 5.5)
         self._player_count = 0
 
-        # Start RCON polling
-        self._start_rcon_polling()
+        # Start REST polling
+        self._start_rest_polling()
 
         # Start idle timer (Req 1.5: starts counting when server starts with 0 players)
         await self._idle_timer.start()
@@ -679,61 +685,33 @@ class WrapperCore:
             reason,
         )
 
-    def _start_rcon_polling(self) -> None:
-        """Start the RCON polling background task."""
-        if self._rcon_poll_task is not None and not self._rcon_poll_task.done():
+    def _start_rest_polling(self) -> None:
+        """Start the REST API polling background task."""
+        if self._rest_poll_task is not None and not self._rest_poll_task.done():
             return
-        self._rcon_poll_task = asyncio.create_task(self._rcon_poll_loop())
+        self._rest_poll_task = asyncio.create_task(self._rest_poll_loop())
 
-    def _cancel_rcon_polling(self) -> None:
-        """Cancel the RCON polling background task."""
-        if self._rcon_poll_task is not None and not self._rcon_poll_task.done():
-            self._rcon_poll_task.cancel()
-        self._rcon_poll_task = None
+    def _cancel_rest_polling(self) -> None:
+        """Cancel the REST API polling background task."""
+        if self._rest_poll_task is not None and not self._rest_poll_task.done():
+            self._rest_poll_task.cancel()
+        self._rest_poll_task = None
 
-    async def _rcon_poll_loop(self) -> None:
-        """Background task that periodically queries player count via RCON.
+    async def _rest_poll_loop(self) -> None:
+        """Background task that periodically queries player count via REST API.
 
         Runs while the server is in RUNNING state. Handles player count
-        updates, idle timer management, and RCON failure tracking.
+        updates, idle timer management, and failure tracking.
         """
-        # Give the server a moment to initialize RCON
+        # Give the server a moment to initialize the REST API
         await asyncio.sleep(2)
-
-        # Attempt initial RCON connection with retry and backoff
-        max_attempts = 5
-        delays = [2, 4, 8, 16, 30]  # seconds between retries
-        connected = False
-
-        for attempt in range(1, max_attempts + 1):
-            if self._state != ServerState.RUNNING:
-                logger.debug("State changed during RCON connect retry, aborting")
-                return
-
-            connected = await self._rcon_client.connect()
-            if connected:
-                break
-
-            if attempt < max_attempts:
-                delay = delays[attempt - 1]
-                logger.warning(
-                    "RCON connection attempt %d/%d failed, retrying in %ds...",
-                    attempt, max_attempts, delay,
-                )
-                await asyncio.sleep(delay)
-            else:
-                logger.error(
-                    "RCON connection failed after %d attempts. "
-                    "Will continue polling with reconnect-on-failure fallback.",
-                    max_attempts,
-                )
 
         try:
             while self._state == ServerState.RUNNING:
-                result = await self._rcon_client.query_players()
+                result = await self._rest_client.get_metrics()
 
                 if result.success:
-                    self._consecutive_rcon_failures = 0
+                    self._consecutive_rest_failures = 0
                     new_count = max(0, result.player_count)  # Never allow < 0
                     old_count = self._player_count
 
@@ -766,37 +744,33 @@ class WrapperCore:
                         self._idle_timer.cancel()
 
                 else:
-                    # RCON query failed - retain last count (Req 5.6)
-                    self._consecutive_rcon_failures += 1
+                    # REST query failed - retain last count (Req 2.3)
+                    self._consecutive_rest_failures += 1
                     logger.warning(
-                        "RCON query failed (attempt %d): %s",
-                        self._consecutive_rcon_failures,
+                        "REST API query failed (attempt %d): %s",
+                        self._consecutive_rest_failures,
                         result.error_message,
                     )
 
-                    if self._consecutive_rcon_failures >= 5:
-                        # Log warning on 5 consecutive failures (Req 5.7)
+                    if self._consecutive_rest_failures >= 5:
+                        # Log warning on 5 consecutive failures (Req 2.5)
                         logger.warning(
-                            "RCON has failed %d consecutive times",
-                            self._consecutive_rcon_failures,
+                            "REST API has failed %d consecutive times",
+                            self._consecutive_rest_failures,
                         )
 
-                    # Try reconnecting on next poll
-                    await self._rcon_client.disconnect()
-                    await self._rcon_client.connect()
-
                 # Wait for next poll interval
-                await asyncio.sleep(self._config.rcon_poll_interval_seconds)
+                await asyncio.sleep(self._config.poll_interval_seconds)
 
         except asyncio.CancelledError:
-            logger.debug("RCON polling task cancelled")
+            logger.debug("REST polling task cancelled")
         except Exception as e:
-            logger.error("Unexpected error in RCON polling loop: %s", e)
-            self._logger.log_error("RCON polling loop", e)
+            logger.error("Unexpected error in REST polling loop: %s", e)
+            self._logger.log_error("REST polling loop", e)
 
     async def _cleanup(self) -> None:
         """Perform cleanup when the wrapper is shutting down."""
-        self._cancel_rcon_polling()
+        self._cancel_rest_polling()
         self._idle_timer.cancel()
         await self._connection_listener.stop_listening()
         await self._rcon_client.disconnect()
