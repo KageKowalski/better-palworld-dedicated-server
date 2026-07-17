@@ -4,6 +4,16 @@ import logging
 
 import aiohttp
 
+from src.models import (
+    AnnounceResult,
+    InfoResult,
+    MetricsResult,
+    PlayerInfo,
+    PlayersResult,
+    ShutdownResult,
+    StopResult,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -104,6 +114,108 @@ class RestClient:
         except aiohttp.ClientError as e:
             logger.debug("REST API client error for %s %s: %s", method, path, e)
             return (False, None, f"Client error: {e}")
+
+    async def get_info(self) -> InfoResult:
+        """GET /v1/api/info — used for connectivity check.
+
+        Returns:
+            InfoResult with server version, name, description on success.
+        """
+        success, data, error = await self._request("GET", "/info")
+        if not success:
+            return InfoResult(success=False, error_message=error)
+        return InfoResult(
+            success=True,
+            version=data.get("version", ""),
+            server_name=data.get("servername", ""),
+            description=data.get("description", ""),
+        )
+
+    async def get_metrics(self) -> MetricsResult:
+        """GET /v1/api/metrics — player count and server metrics.
+
+        Returns:
+            MetricsResult with currentplayernum clamped to min 0 on success.
+        """
+        success, data, error = await self._request("GET", "/metrics")
+        if not success:
+            return MetricsResult(success=False, error_message=error)
+        player_count = max(0, data.get("currentplayernum", 0))
+        return MetricsResult(success=True, player_count=player_count)
+
+    async def get_players(self) -> PlayersResult:
+        """GET /v1/api/players — detailed player list.
+
+        Returns:
+            PlayersResult with list of PlayerInfo objects on success.
+        """
+        success, data, error = await self._request("GET", "/players")
+        if not success:
+            return PlayersResult(success=False, error_message=error)
+        players = []
+        for p in data.get("players", []):
+            players.append(
+                PlayerInfo(
+                    name=p.get("name", ""),
+                    playerid=p.get("playerid", ""),
+                    userid=p.get("userid", ""),
+                    ip=p.get("ip", ""),
+                    ping=float(p.get("ping", 0.0)),
+                    location_x=float(p.get("location_x", 0.0)),
+                    location_y=float(p.get("location_y", 0.0)),
+                    level=int(p.get("level", 0)),
+                )
+            )
+        return PlayersResult(success=True, players=players)
+
+    async def announce(self, message: str) -> AnnounceResult:
+        """POST /v1/api/announce — broadcast message to players.
+
+        Truncates message to 256 characters before sending.
+
+        Args:
+            message: Broadcast text (max 256 chars, truncated if longer).
+
+        Returns:
+            AnnounceResult indicating success or failure.
+        """
+        truncated = message[:256]
+        success, data, error = await self._request(
+            "POST", "/announce", json_body={"message": truncated}
+        )
+        if not success:
+            return AnnounceResult(success=False, error_message=error)
+        return AnnounceResult(success=True)
+
+    async def shutdown(
+        self, waittime: int = 1, message: str = "Server shutting down"
+    ) -> ShutdownResult:
+        """POST /v1/api/shutdown — graceful server shutdown.
+
+        Args:
+            waittime: Seconds the server waits before shutting down.
+            message: Shutdown message sent to players.
+
+        Returns:
+            ShutdownResult indicating success or failure.
+        """
+        success, data, error = await self._request(
+            "POST", "/shutdown", json_body={"waittime": waittime, "message": message}
+        )
+        if not success:
+            return ShutdownResult(success=False, error_message=error)
+        return ShutdownResult(success=True)
+
+    async def stop(self) -> StopResult:
+        """POST /v1/api/stop — force stop.
+
+        Returns:
+            StopResult indicating success or failure.
+        """
+        success, data, error = await self._request("POST", "/stop")
+        if not success:
+            return StopResult(success=False, error_message=error)
+        return StopResult(success=True)
 
     async def close(self) -> None:
         """Close the underlying aiohttp session and release resources."""
