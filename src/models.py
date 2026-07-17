@@ -52,15 +52,6 @@ class RestartResult:
 
 
 @dataclass
-class RconQueryResult:
-    """Result of an RCON player count query."""
-
-    success: bool
-    player_count: int = 0
-    error_message: str | None = None
-
-
-@dataclass
 class ValidationResult:
     """Result of a setting value validation check."""
 
