@@ -168,6 +168,9 @@ class WrapperCore:
         # Stop the listener to release the port for the server
         await self._connection_listener.stop_listening()
 
+        # Ensure REST API is enabled in settings before launch
+        self._ensure_rest_api_enabled()
+
         # Start the server
         result = await self._process_manager.start_server(
             str(self._config.server_exe_path)
@@ -289,6 +292,9 @@ class WrapperCore:
 
         # Stop the listener to release the port
         await self._connection_listener.stop_listening()
+
+        # Ensure REST API is enabled in settings before launch
+        self._ensure_rest_api_enabled()
 
         # Start the server process
         result = await self._process_manager.start_server(
@@ -564,6 +570,9 @@ class WrapperCore:
         # --- STARTING phase ---
         self._transition_to(ServerState.STARTING, "Starting server after maintenance")
 
+        # Ensure REST API is enabled in settings before launch
+        self._ensure_rest_api_enabled()
+
         start_result = await self._process_manager.start_server(
             str(self._config.server_exe_path)
         )
@@ -633,6 +642,36 @@ class WrapperCore:
     # -------------------------------------------------------------------------
     # Private helpers
     # -------------------------------------------------------------------------
+
+    def _ensure_rest_api_enabled(self) -> None:
+        """Check PalWorldSettings.ini and enable the REST API if disabled.
+
+        The REST API is required for the wrapper to function (player count
+        polling, broadcasts, graceful shutdown). If RESTAPIEnabled is False
+        in the settings file, this method sets it to True before the server
+        is launched.
+        """
+        settings = SettingsParser.read_settings(self._config.settings_file_path)
+        if "__error__" in settings:
+            logger.warning(
+                "Could not read settings file to check RESTAPIEnabled: %s",
+                settings["__error__"],
+            )
+            return
+
+        if settings.get("RESTAPIEnabled") is False:
+            result = SettingsParser.write_setting(
+                self._config.settings_file_path, "RESTAPIEnabled", True
+            )
+            if result.valid:
+                logger.info(
+                    "RESTAPIEnabled was False — automatically set to True"
+                )
+            else:
+                logger.warning(
+                    "Failed to enable RESTAPIEnabled in settings file: %s",
+                    result.error_message,
+                )
 
     def _on_udp_packet_received(self) -> None:
         """Callback invoked by ConnectionListener when a UDP packet arrives.
