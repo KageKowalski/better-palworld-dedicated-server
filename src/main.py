@@ -68,16 +68,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Path to PalWorldSettings.ini",
     )
     parser.add_argument(
-        "--rcon-port",
+        "--api-port",
         type=int,
-        default=25575,
-        help="RCON TCP port (default: 25575)",
+        default=8212,
+        help="REST API TCP port (default: 8212, valid: 1-65535)",
     )
     parser.add_argument(
-        "--rcon-password",
+        "--admin-password",
         type=str,
         default="",
-        help="RCON admin password (default: empty)",
+        help="Admin password for REST API authentication (default: empty, max 128 chars)",
     )
     parser.add_argument(
         "--game-port",
@@ -95,7 +95,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--poll-interval",
         type=int,
         default=10,
-        help="RCON poll interval in seconds (default: 10)",
+        help="REST API poll interval in seconds (default: 10, valid: 1-30)",
     )
     parser.add_argument(
         "--maintenance-interval",
@@ -160,10 +160,10 @@ def build_config(args: argparse.Namespace) -> WrapperConfig:
         server_exe_path=args.server_exe,
         settings_file_path=args.settings_file,
         game_port=args.game_port,
-        rcon_port=args.rcon_port,
-        rcon_password=args.rcon_password,
+        api_port=args.api_port,
+        admin_password=args.admin_password,
         idle_timeout_seconds=args.idle_timeout,
-        rcon_poll_interval_seconds=args.poll_interval,
+        poll_interval_seconds=args.poll_interval,
         maintenance_interval_seconds=args.maintenance_interval,
         maintenance_broadcast_lead_seconds=args.maintenance_broadcast_lead,
         steamcmd_path=args.steamcmd_path,
