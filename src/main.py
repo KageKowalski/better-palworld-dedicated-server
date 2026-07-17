@@ -68,16 +68,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Path to PalWorldSettings.ini",
     )
     parser.add_argument(
-        "--rcon-port",
+        "--api-port",
         type=int,
-        default=25575,
-        help="RCON TCP port (default: 25575)",
+        default=8212,
+        help="REST API TCP port (default: 8212, valid: 1-65535)",
     )
     parser.add_argument(
-        "--rcon-password",
+        "--admin-password",
         type=str,
         default="",
-        help="RCON admin password (default: empty)",
+        help="Admin password for REST API authentication (default: empty, max 128 chars)",
     )
     parser.add_argument(
         "--game-port",
@@ -95,7 +95,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--poll-interval",
         type=int,
         default=10,
-        help="RCON poll interval in seconds (default: 10)",
+        help="REST API poll interval in seconds (default: 10, valid: 1-30)",
     )
     parser.add_argument(
         "--maintenance-interval",
@@ -144,6 +144,42 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def ensure_rest_api_enabled(config: WrapperConfig) -> None:
+    """Ensure RESTAPIEnabled=True in PalWorldSettings.ini before starting.
+
+    The REST API is required for the wrapper to function. If the setting
+    is False, this function attempts to set it to True. Outcomes are logged
+    to the log file only — no console output is produced.
+
+    Args:
+        config: The wrapper configuration with settings_file_path.
+    """
+    from src.settings_parser import SettingsParser
+
+    settings = SettingsParser.read_settings(config.settings_file_path)
+    if "__error__" in settings:
+        logger.warning(
+            "Could not read settings file to check RESTAPIEnabled: %s",
+            settings["__error__"],
+        )
+        return
+
+    if settings.get("RESTAPIEnabled") is False:
+        result = SettingsParser.write_setting(
+            config.settings_file_path, "RESTAPIEnabled", True
+        )
+        if result.valid:
+            logger.debug("RESTAPIEnabled was False — automatically set to True")
+        else:
+            logger.error(
+                "RESTAPIEnabled is False in %s and could not be updated "
+                "automatically (%s). Please set RESTAPIEnabled=True manually "
+                "or run with elevated permissions.",
+                config.settings_file_path,
+                result.error_message,
+            )
+
+
 def build_config(args: argparse.Namespace) -> WrapperConfig:
     """Build a WrapperConfig from parsed command-line arguments.
 
@@ -160,10 +196,10 @@ def build_config(args: argparse.Namespace) -> WrapperConfig:
         server_exe_path=args.server_exe,
         settings_file_path=args.settings_file,
         game_port=args.game_port,
-        rcon_port=args.rcon_port,
-        rcon_password=args.rcon_password,
+        api_port=args.api_port,
+        admin_password=args.admin_password,
         idle_timeout_seconds=args.idle_timeout,
-        rcon_poll_interval_seconds=args.poll_interval,
+        poll_interval_seconds=args.poll_interval,
         maintenance_interval_seconds=args.maintenance_interval,
         maintenance_broadcast_lead_seconds=args.maintenance_broadcast_lead,
         steamcmd_path=args.steamcmd_path,
@@ -322,6 +358,9 @@ def main(argv: list[str] | None = None) -> None:
         logger.error("Unexpected error during startup: %s", e, exc_info=True)
         print(f"Startup error: {e}", file=sys.stderr)
         sys.exit(1)
+
+    # Ensure RESTAPIEnabled=True before anything else
+    ensure_rest_api_enabled(config)
 
     # Check if we need to detach and respawn as a GUI process (Req 1.1, 6.1-6.3)
     if launcher.should_detach(args.interface, args.detached):

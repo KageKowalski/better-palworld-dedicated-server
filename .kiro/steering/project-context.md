@@ -8,8 +8,8 @@ A Python wrapper that sits around the Palworld Dedicated Server (`PalServer.exe`
 
 The wrapper is a **state machine** with four states:
 - **MONITORING** — Server stopped, UDP listener active on port 8211 (retries bind with exponential backoff on transient OS errors)
-- **STARTING** — Server launching, waiting for RCON TCP port 25575 readiness (120s timeout)
-- **RUNNING** — Server active, RCON polling for player count (initial connection retries with backoff), idle timer tracking
+- **STARTING** — Server launching, waiting for REST API TCP port 8212 readiness (120s timeout)
+- **RUNNING** — Server active, REST API polling for player count (initial connection retries with backoff), idle timer tracking
 - **STOPPING** — Graceful shutdown in progress (30s timeout before force kill)
 
 **Interface mode** is selectable via `--interface gui|console` (default: `gui`). The GUI uses tkinter with cooperative async scheduling; the console interface reads from stdin. Both interfaces call the same WrapperCore API.
@@ -23,7 +23,7 @@ The wrapper is a **state machine** with four states:
 | `src/wrapper_core.py` | State machine, coordinates all components |
 | `src/connection_listener.py` | UDP socket listener for connection detection |
 | `src/process_manager.py` | Subprocess lifecycle (start/stop/crash detection) |
-| `src/rcon_client.py` | RCON queries for player count |
+| `src/rest_client.py` | HTTP client for Palworld REST API (aiohttp, Basic Auth, typed result dataclasses) |
 | `src/idle_timer.py` | Countdown timer that triggers shutdown |
 | `src/settings_parser.py` | PalWorldSettings.ini read/write/validate; `SETTING_DEFINITIONS` dict with all ~119 known server parameters (types, ranges, defaults, categories); `SETTING_CATEGORIES` list for canonical display order; `raw_string` flag controls unquoted write formatting for enum/list values |
 | `src/gui_interface.py` | Tkinter-based GUI management interface — cooperative async scheduling with `root.update()` every ~33ms, widgets as `ttk.LabelFrame` subclasses, includes OutputPanel for log display, SettingsPanel for unified settings view/edit |
@@ -40,12 +40,12 @@ The wrapper is a **state machine** with four states:
 
 ## Key Design Decisions
 
-1. **Single process, asyncio** — All concurrency via async tasks, no threads (except `asyncio.to_thread` for blocking RCON lib and stdin)
+1. **Single process, asyncio** — All concurrency via async tasks, no threads (except `asyncio.to_thread` for blocking stdin)
 2. **Callbacks over events** — Components notify WrapperCore via callbacks rather than a pub/sub system
 3. **Result types over exceptions** — Expected failures return dataclasses; only unexpected errors raise
 4. **UDP bind-and-release** — The wrapper binds the game port to detect connections, then releases it so the server can bind
-5. **RCON port for readiness detection** — Server readiness is checked by TCP-connecting to the RCON port (25575), not the game UDP port (8211), since TCP probes work reliably and RCON availability means the server is fully initialized
-6. **Retry with backoff** — UDP port binding and RCON initial connection both use retry loops with exponential backoff to handle transient failures (OS socket cleanup delays, slow server initialization)
+5. **REST API port for readiness detection** — Server readiness is checked by TCP-connecting to the REST API port (8212), not the game UDP port (8211), since TCP probes work reliably and REST API availability means the server is fully initialized
+6. **Retry with backoff** — UDP port binding and REST API initial connection both use retry loops with exponential backoff to handle transient failures (OS socket cleanup delays, slow server initialization)
 7. **Validation at the presentation layer** — Input validation and auto-correction lives in the shared `src/validation.py` module (used by both GUI and console), while SettingsParser handles raw file I/O formatting
 8. **Password masking at display time** — Password values are stored unmasked in the file but displayed as `********` in both GUI settings view and console `settings` command output
 9. **Tkinter cooperative async scheduling** — The GUI integrates with asyncio by calling `root.update()` every ~33ms from an asyncio coroutine instead of running tkinter's blocking `mainloop()`, ensuring WrapperCore background tasks are never starved
@@ -57,14 +57,14 @@ The wrapper is a **state machine** with four states:
 
 ## External Dependencies
 
-- `rcon` — Source RCON protocol client (synchronous, wrapped with `asyncio.to_thread`)
+- `aiohttp` — Async HTTP client for REST API communication (native asyncio, connection pooling)
 - Palworld Dedicated Server uses `PalWorldSettings.ini` with a non-standard single-line `OptionSettings=(key=value,...)` format
 
 ## Configuration Defaults
 
 - Game port: 8211 (UDP)
-- RCON port: 25575 (TCP)
+- REST API port: 8212 (TCP)
 - Idle timeout: 300 seconds
 - Start timeout: 120 seconds
 - Stop timeout: 30 seconds
-- RCON poll interval: 10 seconds (valid range: 1–30)
+- REST API poll interval: 10 seconds (valid range: 1–30)

@@ -233,7 +233,7 @@ class GuiInterface:
 
         Calls root.update() every ~33ms (30 FPS equivalent) to process tkinter
         events without blocking the asyncio event loop. This allows WrapperCore's
-        background tasks (RCON polling, idle timer, maintenance timer, connection
+        background tasks (REST API polling, idle timer, maintenance timer, connection
         listener) to continue executing on schedule.
 
         The loop continues until self._running is set to False (via _shutdown())
