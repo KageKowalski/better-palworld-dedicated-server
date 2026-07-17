@@ -9,6 +9,7 @@ description = "Asyncio-based wrapper for managing a Palworld Dedicated Server on
 requires-python = ">=3.11"
 dependencies = [
     "aiohttp>=3.9.0",
+    "customtkinter>=5.2.0",
 ]
 
 [project.optional-dependencies]

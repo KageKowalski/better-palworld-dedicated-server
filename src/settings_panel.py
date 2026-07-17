@@ -7,11 +7,27 @@ setting is displayed with full metadata and an inline edit control.
 
 import logging
 import tkinter as tk
-from tkinter import ttk, font as tkfont
+from tkinter import font as tkfont
 from collections.abc import Callable
 from typing import Any
 
+import customtkinter
+
 from src.config import WrapperConfig
+from src.gui_theme import (
+    BUTTON_CORNER_RADIUS,
+    CARD_INNER_PADDING,
+    COLOR_ACCENT,
+    COLOR_INPUT_BG,
+    COLOR_PRIMARY,
+    COLOR_TEXT,
+    COLOR_TEXT_SECONDARY,
+    FONT_BODY,
+    FONT_SUBHEADING,
+    NESTED_CARD_CORNER_RADIUS,
+    WIDGET_INNER_SPACING,
+    create_card_frame,
+)
 from src.models import ServerState
 from src.pending_settings import PendingSettingsQueue
 from src.settings_helpers import (
@@ -36,11 +52,12 @@ logger = logging.getLogger(__name__)
 NotificationBar = Any  # Avoids circular import with gui_interface
 
 
-class SettingsPanel(ttk.LabelFrame):
+class SettingsPanel(customtkinter.CTkFrame):
     """Unified settings display and modification panel.
 
     Replaces the former SettingsView and SettingsEditor with a single scrollable,
     searchable interface showing all setting metadata inline with edit controls.
+    Uses grid layout and CustomTkinter widgets themed via gui_theme constants.
     """
 
     MAX_SEARCH_LENGTH = 200
@@ -56,13 +73,13 @@ class SettingsPanel(ttk.LabelFrame):
         """Initialize the SettingsPanel.
 
         Args:
-            parent: The parent tkinter widget.
+            parent: The parent widget.
             config: The wrapper configuration (provides settings_file_path).
             wrapper_core: The WrapperCore instance for state queries.
             settings_write_handler: Handler for routing setting writes/queues.
             notification_bar: The NotificationBar instance for messages.
         """
-        super().__init__(parent, text="Server Settings")
+        super().__init__(parent, fg_color="transparent")
 
         self._config = config
         self._wrapper_core = wrapper_core
@@ -70,82 +87,75 @@ class SettingsPanel(ttk.LabelFrame):
         self._notification_bar = notification_bar
 
         self._setting_rows: list["SettingRow"] = []
-        self._no_results_label: ttk.Label | None = None
+        self._no_results_label: customtkinter.CTkLabel | None = None
+        self._category_headers: list[customtkinter.CTkLabel] = []
 
         self._build_layout()
         self.refresh()
 
     def _build_layout(self) -> None:
-        """Construct the internal layout: search, pending indicator, canvas, refresh."""
-        # 1. Search input field
-        search_frame = ttk.Frame(self)
-        search_frame.pack(fill="x", padx=5, pady=(5, 2))
+        """Construct the internal grid layout: search, pending indicator, scrollable frame, buttons."""
+        # Configure grid weights
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=0)  # Search entry
+        self.rowconfigure(1, weight=0)  # Pending indicator
+        self.rowconfigure(2, weight=1)  # Scrollable frame (expands)
+        self.rowconfigure(3, weight=0)  # Buttons
 
-        ttk.Label(search_frame, text="Search:").pack(side="left", padx=(0, 5))
+        # Row 0: Search input field
         self._search_var = tk.StringVar()
         self._search_var.trace_add("write", self._on_search_changed)
-        self._search_entry = ttk.Entry(
-            search_frame, textvariable=self._search_var, width=40
+        self._search_entry = customtkinter.CTkEntry(
+            self,
+            textvariable=self._search_var,
+            placeholder_text="Search settings...",
+            fg_color=COLOR_INPUT_BG,
+            text_color=COLOR_TEXT,
         )
-        self._search_entry.pack(side="left", fill="x", expand=True)
-
-        # 2. Pending changes indicator (hidden when queue empty)
-        self._pending_indicator = ttk.Label(self, text="", foreground="orange")
-        self._pending_indicator.pack(fill="x", padx=5, pady=(2, 2))
-        self._pending_indicator.pack_forget()
-
-        # 3. Scrollable canvas + frame container
-        canvas_frame = ttk.Frame(self)
-        canvas_frame.pack(fill="both", expand=True, padx=5, pady=2)
-
-        self._canvas = tk.Canvas(canvas_frame, highlightthickness=0)
-        self._scrollbar = ttk.Scrollbar(
-            canvas_frame, orient="vertical", command=self._canvas.yview
-        )
-        self._canvas.configure(yscrollcommand=self._scrollbar.set)
-
-        self._scrollbar.pack(side="right", fill="y")
-        self._canvas.pack(side="left", fill="both", expand=True)
-
-        # Inner frame for SettingRow widgets
-        self._inner_frame = ttk.Frame(self._canvas)
-        self._canvas_window = self._canvas.create_window(
-            (0, 0), window=self._inner_frame, anchor="nw"
+        self._search_entry.grid(
+            row=0, column=0, sticky="ew",
+            padx=WIDGET_INNER_SPACING, pady=(WIDGET_INNER_SPACING, 2),
         )
 
-        # Update scroll region when inner frame resizes
-        self._inner_frame.bind("<Configure>", self._on_frame_configure)
-        self._canvas.bind("<Configure>", self._on_canvas_configure)
-
-        # Bind mousewheel for scrolling
-        self._canvas.bind("<Enter>", self._bind_mousewheel)
-        self._canvas.bind("<Leave>", self._unbind_mousewheel)
-
-        # 4. Refresh button
-        self._refresh_button = ttk.Button(
-            self, text="Refresh", command=self.refresh
+        # Row 1: Pending changes indicator (hidden when queue empty)
+        self._pending_indicator = customtkinter.CTkLabel(
+            self,
+            text="",
+            text_color=COLOR_ACCENT,
+            font=FONT_BODY,
+            anchor="w",
         )
-        self._refresh_button.pack(anchor="e", padx=5, pady=(2, 5))
+        # Initially hidden — will be shown via grid() when pending count > 0
 
-    def _on_frame_configure(self, event: "tk.Event") -> None:
-        """Update canvas scroll region when inner frame size changes."""
-        self._canvas.configure(scrollregion=self._canvas.bbox("all"))
+        # Row 2: Scrollable frame for setting rows
+        self._scrollable_frame = customtkinter.CTkScrollableFrame(
+            self,
+            fg_color="transparent",
+        )
+        self._scrollable_frame.grid(
+            row=2, column=0, sticky="nsew",
+            padx=WIDGET_INNER_SPACING, pady=2,
+        )
+        self._scrollable_frame.columnconfigure(0, weight=1)
 
-    def _on_canvas_configure(self, event: "tk.Event") -> None:
-        """Stretch the inner frame to match canvas width."""
-        self._canvas.itemconfig(self._canvas_window, width=event.width)
+        # Row 3: Button frame (Apply + Refresh)
+        button_frame = customtkinter.CTkFrame(self, fg_color="transparent")
+        button_frame.grid(
+            row=3, column=0, sticky="ew",
+            padx=WIDGET_INNER_SPACING, pady=(2, WIDGET_INNER_SPACING),
+        )
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(1, weight=0)
+        button_frame.columnconfigure(2, weight=0)
 
-    def _bind_mousewheel(self, event: "tk.Event") -> None:
-        """Bind mousewheel scrolling when mouse enters canvas."""
-        self._canvas.bind_all("<MouseWheel>", self._on_mousewheel)
-
-    def _unbind_mousewheel(self, event: "tk.Event") -> None:
-        """Unbind mousewheel scrolling when mouse leaves canvas."""
-        self._canvas.unbind_all("<MouseWheel>")
-
-    def _on_mousewheel(self, event: "tk.Event") -> None:
-        """Scroll the canvas on mousewheel events."""
-        self._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        self._refresh_button = customtkinter.CTkButton(
+            button_frame,
+            text="Refresh",
+            command=self.refresh,
+            fg_color=COLOR_PRIMARY,
+            corner_radius=BUTTON_CORNER_RADIUS,
+        )
+        self._refresh_button.grid(row=0, column=2, padx=(WIDGET_INNER_SPACING, 0))
 
     def _on_search_changed(self, *args) -> None:
         """Trace callback for the search StringVar — limits length and filters."""
@@ -175,9 +185,9 @@ class SettingsPanel(ttk.LabelFrame):
             row.destroy()
         self._setting_rows.clear()
 
-        for header in getattr(self, "_category_headers", []):
+        for header in self._category_headers:
             header.destroy()
-        self._category_headers: list[ttk.Label] = []
+        self._category_headers = []
 
         # Hide "no results" label if present
         if self._no_results_label is not None:
@@ -202,6 +212,9 @@ class SettingsPanel(ttk.LabelFrame):
             category_buckets[cat].sort(key=lambda k: k.lower())
         uncategorized.sort(key=lambda k: k.lower())
 
+        # Track the current grid row in the scrollable frame
+        grid_row = 0
+
         # Build rows in category order with headers
         for cat in SETTING_CATEGORIES:
             keys_in_cat = category_buckets[cat]
@@ -209,14 +222,19 @@ class SettingsPanel(ttk.LabelFrame):
                 continue
 
             # Add category header
-            header = ttk.Label(
-                self._inner_frame,
+            header = customtkinter.CTkLabel(
+                self._scrollable_frame,
                 text=cat,
-                font=self._get_header_font(),
+                font=FONT_SUBHEADING,
+                text_color=COLOR_ACCENT,
                 anchor="w",
             )
-            header.pack(fill="x", padx=2, pady=(10, 4))
+            header.grid(
+                row=grid_row, column=0, sticky="ew",
+                padx=2, pady=(10, 4),
+            )
             self._category_headers.append(header)
+            grid_row += 1
 
             # Add setting rows for this category
             for key in keys_in_cat:
@@ -226,25 +244,34 @@ class SettingsPanel(ttk.LabelFrame):
                 )
 
                 row = SettingRow(
-                    parent=self._inner_frame,
+                    parent=self._scrollable_frame,
                     key=key,
                     definition=definition,
                     current_value=current_value,
                     on_apply=self._on_apply_setting,
                 )
-                row.pack(fill="x", padx=2, pady=2)
+                row.grid(
+                    row=grid_row, column=0, sticky="ew",
+                    padx=2, pady=2,
+                )
                 self._setting_rows.append(row)
+                grid_row += 1
 
         # Add uncategorized settings at the end (if any)
         if uncategorized:
-            header = ttk.Label(
-                self._inner_frame,
+            header = customtkinter.CTkLabel(
+                self._scrollable_frame,
                 text="Other",
-                font=self._get_header_font(),
+                font=FONT_SUBHEADING,
+                text_color=COLOR_ACCENT,
                 anchor="w",
             )
-            header.pack(fill="x", padx=2, pady=(10, 4))
+            header.grid(
+                row=grid_row, column=0, sticky="ew",
+                padx=2, pady=(10, 4),
+            )
             self._category_headers.append(header)
+            grid_row += 1
 
             for key in uncategorized:
                 definition = SETTING_DEFINITIONS.get(key)
@@ -253,30 +280,23 @@ class SettingsPanel(ttk.LabelFrame):
                 )
 
                 row = SettingRow(
-                    parent=self._inner_frame,
+                    parent=self._scrollable_frame,
                     key=key,
                     definition=definition,
                     current_value=current_value,
                     on_apply=self._on_apply_setting,
                 )
-                row.pack(fill="x", padx=2, pady=2)
+                row.grid(
+                    row=grid_row, column=0, sticky="ew",
+                    padx=2, pady=2,
+                )
                 self._setting_rows.append(row)
+                grid_row += 1
 
         # Re-apply current search filter
         search_text = self._search_var.get()
         if search_text:
             self.filter_settings(search_text)
-
-    def _get_header_font(self):
-        """Return a bold, slightly larger font for category headers."""
-        try:
-            from tkinter import font as tkfont
-            default_font = tkfont.nametofont("TkDefaultFont")
-            header_font = default_font.copy()
-            header_font.configure(weight="bold", size=default_font.cget("size") + 2)
-            return header_font
-        except Exception:
-            return None
 
     def filter_settings(self, search_text: str) -> None:
         """Show only SettingRows matching the search text.
@@ -284,9 +304,6 @@ class SettingsPanel(ttk.LabelFrame):
         Matches case-insensitively against the key name, description,
         and category. Category headers are hidden/shown based on whether
         they have visible children.
-
-        Uses pack_forget + re-pack in correct order to avoid tkinter's
-        pack ordering issue where re-packed widgets append to the end.
 
         Args:
             search_text: The search query string.
@@ -296,15 +313,9 @@ class SettingsPanel(ttk.LabelFrame):
             self._no_results_label.destroy()
             self._no_results_label = None
 
-        # Unpack everything first to reset pack order
-        for header in self._category_headers:
-            header.pack_forget()
-        for row in self._setting_rows:
-            row.pack_forget()
-
         if not search_text:
-            # Re-pack all headers and rows in correct interleaved order
-            self._repack_all()
+            # Show everything — re-grid all headers and rows
+            self._regrid_all()
             return
 
         search_lower = search_text.lower()
@@ -325,12 +336,23 @@ class SettingsPanel(ttk.LabelFrame):
                 visible_count += 1
                 visible_categories.add(row.category)
 
-        # Re-pack headers and matching rows in correct order
+        # Hide everything first
+        for header in self._category_headers:
+            header.grid_remove()
+        for row in self._setting_rows:
+            row.grid_remove()
+
+        # Re-grid headers and matching rows in correct order
+        grid_row = 0
         for header in self._category_headers:
             header_text = header.cget("text")
             if header_text in visible_categories:
-                header.pack(fill="x", padx=2, pady=(10, 4))
-                # Pack only matching rows that belong to this category
+                header.grid(
+                    row=grid_row, column=0, sticky="ew",
+                    padx=2, pady=(10, 4),
+                )
+                grid_row += 1
+                # Grid only matching rows that belong to this category
                 for row in self._setting_rows:
                     if row.category != header_text:
                         continue
@@ -342,27 +364,52 @@ class SettingsPanel(ttk.LabelFrame):
                         or search_lower in desc_lower
                         or search_lower in cat_lower
                     ):
-                        row.pack(fill="x", padx=2, pady=2)
+                        row.grid(
+                            row=grid_row, column=0, sticky="ew",
+                            padx=2, pady=2,
+                        )
+                        grid_row += 1
 
         # Show "No matching settings" if nothing matched
         if visible_count == 0:
-            self._no_results_label = ttk.Label(
-                self._inner_frame, text="No matching settings"
+            self._no_results_label = customtkinter.CTkLabel(
+                self._scrollable_frame,
+                text="No matching settings",
+                text_color=COLOR_TEXT_SECONDARY,
+                font=FONT_BODY,
             )
-            self._no_results_label.pack(fill="x", padx=5, pady=10)
+            self._no_results_label.grid(
+                row=0, column=0, sticky="ew",
+                padx=WIDGET_INNER_SPACING, pady=10,
+            )
 
-    def _repack_all(self) -> None:
-        """Re-pack all category headers and setting rows in correct order.
+    def _regrid_all(self) -> None:
+        """Re-grid all category headers and setting rows in correct order.
 
-        Iterates through headers and packs each header followed by its
+        Iterates through headers and grids each header followed by its
         associated rows, preserving the category-grouped display order.
         """
+        # Remove everything first
+        for header in self._category_headers:
+            header.grid_remove()
+        for row in self._setting_rows:
+            row.grid_remove()
+
+        grid_row = 0
         for header in self._category_headers:
             header_text = header.cget("text")
-            header.pack(fill="x", padx=2, pady=(10, 4))
+            header.grid(
+                row=grid_row, column=0, sticky="ew",
+                padx=2, pady=(10, 4),
+            )
+            grid_row += 1
             for row in self._setting_rows:
                 if row.category == header_text:
-                    row.pack(fill="x", padx=2, pady=2)
+                    row.grid(
+                        row=grid_row, column=0, sticky="ew",
+                        padx=2, pady=2,
+                    )
+                    grid_row += 1
 
     def update_pending_indicator(self) -> None:
         """Update the pending changes badge count."""
@@ -373,9 +420,12 @@ class SettingsPanel(ttk.LabelFrame):
             if count > 0:
                 text = f"{count} change(s) pending"
                 self._pending_indicator.configure(text=text)
-                self._pending_indicator.pack(fill="x", padx=5, pady=(2, 2))
+                self._pending_indicator.grid(
+                    row=1, column=0, sticky="ew",
+                    padx=WIDGET_INNER_SPACING, pady=(2, 2),
+                )
             else:
-                self._pending_indicator.pack_forget()
+                self._pending_indicator.grid_remove()
                 self._pending_indicator.configure(text="")
         except Exception as e:
             logger.error("Error updating pending indicator: %s", e)
@@ -443,11 +493,12 @@ class SettingsPanel(ttk.LabelFrame):
         self.update_pending_indicator()
 
 
-class SettingRow(ttk.Frame):
+class SettingRow(customtkinter.CTkFrame):
     """Single setting row with metadata display and edit control.
 
     Displays one setting key with its description, allowed values, default,
     current value, and an inline input control with Apply button.
+    Wrapped in a nested Card_Frame with NESTED_CARD_CORNER_RADIUS.
     """
 
     def __init__(
@@ -461,13 +512,17 @@ class SettingRow(ttk.Frame):
         """Initialize a SettingRow.
 
         Args:
-            parent: The parent tkinter widget (the inner frame of the canvas).
+            parent: The parent widget (the scrollable frame).
             key: The setting key name.
             definition: The SettingDefinition for this key, or None if unknown.
             current_value: The current value read from file (empty string if absent).
             on_apply: Callback invoked with (key, new_value) when Apply is clicked.
         """
-        super().__init__(parent, relief="groove", borderwidth=1, padding=4)
+        super().__init__(
+            parent,
+            corner_radius=NESTED_CARD_CORNER_RADIUS,
+            fg_color=COLOR_INPUT_BG,
+        )
 
         self.key = key
         self._definition = definition
@@ -489,39 +544,69 @@ class SettingRow(ttk.Frame):
         self._build_row()
 
     def _build_row(self) -> None:
-        """Build the three-row layout for this setting."""
-        # Attempt to create a bold font variant
-        try:
-            default_font = tkfont.nametofont("TkDefaultFont")
-            self._bold_font = default_font.copy()
-            self._bold_font.configure(weight="bold")
-        except Exception:
-            self._bold_font = None
+        """Build the three-row grid layout for this setting."""
+        self.columnconfigure(0, weight=1)
 
-        # Row 1: Key name (bold) + Description
-        row1 = ttk.Frame(self)
-        row1.pack(fill="x", pady=(0, 2))
+        # Derive bold font for modified values
+        body_family = FONT_BODY[0]
+        body_size = FONT_BODY[1]
+        self._bold_font = (body_family, body_size, "bold")
+        self._normal_font = FONT_BODY
 
-        key_label = ttk.Label(row1, text=self.key, font=self._bold_font)
-        key_label.pack(side="left", padx=(0, 10))
+        # Row 0: Key name (bold) + Description
+        row0_frame = customtkinter.CTkFrame(self, fg_color="transparent")
+        row0_frame.grid(
+            row=0, column=0, sticky="ew",
+            padx=WIDGET_INNER_SPACING, pady=(WIDGET_INNER_SPACING, 2),
+        )
+        row0_frame.columnconfigure(1, weight=1)
 
-        desc_label = ttk.Label(row1, text=self.description, foreground="gray")
-        desc_label.pack(side="left", fill="x", expand=True)
+        key_label = customtkinter.CTkLabel(
+            row0_frame,
+            text=self.key,
+            font=self._bold_font,
+            text_color=COLOR_TEXT,
+            anchor="w",
+        )
+        key_label.grid(row=0, column=0, sticky="w", padx=(0, 10))
 
-        # Row 2: Allowed | Default | Current
-        row2 = ttk.Frame(self)
-        row2.pack(fill="x", pady=(0, 2))
+        desc_label = customtkinter.CTkLabel(
+            row0_frame,
+            text=self.description,
+            font=FONT_BODY,
+            text_color=COLOR_TEXT_SECONDARY,
+            anchor="w",
+        )
+        desc_label.grid(row=0, column=1, sticky="ew")
+
+        # Row 1: Allowed | Default | Current
+        row1_frame = customtkinter.CTkFrame(self, fg_color="transparent")
+        row1_frame.grid(
+            row=1, column=0, sticky="ew",
+            padx=WIDGET_INNER_SPACING, pady=(0, 2),
+        )
 
         allowed_text = format_allowed_values(self._definition)
-        ttk.Label(row2, text="Allowed:").pack(side="left", padx=(0, 2))
-        ttk.Label(row2, text=allowed_text).pack(side="left", padx=(0, 15))
+        customtkinter.CTkLabel(
+            row1_frame, text="Allowed:", font=FONT_BODY,
+            text_color=COLOR_TEXT, anchor="w",
+        ).grid(row=0, column=0, sticky="w", padx=(0, 2))
+        customtkinter.CTkLabel(
+            row1_frame, text=allowed_text, font=FONT_BODY,
+            text_color=COLOR_TEXT_SECONDARY, anchor="w",
+        ).grid(row=0, column=1, sticky="w", padx=(0, 15))
 
         default_text = format_default_value(self.key, self._definition)
-        ttk.Label(row2, text="Default:").pack(side="left", padx=(0, 2))
-        ttk.Label(row2, text=default_text).pack(side="left", padx=(0, 15))
+        customtkinter.CTkLabel(
+            row1_frame, text="Default:", font=FONT_BODY,
+            text_color=COLOR_TEXT, anchor="w",
+        ).grid(row=0, column=2, sticky="w", padx=(0, 2))
+        customtkinter.CTkLabel(
+            row1_frame, text=default_text, font=FONT_BODY,
+            text_color=COLOR_TEXT_SECONDARY, anchor="w",
+        ).grid(row=0, column=3, sticky="w", padx=(0, 15))
 
         current_display = format_current_value(self.key, self._current_value)
-        ttk.Label(row2, text="Current:").pack(side="left", padx=(0, 2))
 
         # Bold the current value if it differs from default
         is_modified = False
@@ -530,15 +615,26 @@ class SettingRow(ttk.Frame):
                 self._current_value, self._definition.default_value, self._definition
             )
 
-        current_font = self._bold_font if is_modified else None
-        self._current_value_label = ttk.Label(
-            row2, text=current_display, font=current_font
-        )
-        self._current_value_label.pack(side="left")
+        current_font = self._bold_font if is_modified else self._normal_font
 
-        # Row 3: Input control + Apply button
-        row3 = ttk.Frame(self)
-        row3.pack(fill="x")
+        customtkinter.CTkLabel(
+            row1_frame, text="Current:", font=FONT_BODY,
+            text_color=COLOR_TEXT, anchor="w",
+        ).grid(row=0, column=4, sticky="w", padx=(0, 2))
+        self._current_value_label = customtkinter.CTkLabel(
+            row1_frame, text=current_display, font=current_font,
+            text_color=COLOR_TEXT, anchor="w",
+        )
+        self._current_value_label.grid(row=0, column=5, sticky="w")
+
+        # Row 2: Input control + Apply button
+        row2_frame = customtkinter.CTkFrame(self, fg_color="transparent")
+        row2_frame.grid(
+            row=2, column=0, sticky="ew",
+            padx=WIDGET_INNER_SPACING, pady=(0, WIDGET_INNER_SPACING),
+        )
+        row2_frame.columnconfigure(0, weight=0)
+        row2_frame.columnconfigure(1, weight=0)
 
         input_type = get_input_control_type(self._definition)
         is_password = is_password_setting(self.key)
@@ -557,11 +653,11 @@ class SettingRow(ttk.Frame):
             else:
                 combobox_values = []
 
-            self._input_control = ttk.Combobox(
-                row3,
-                textvariable=self._input_var,
+            self._input_control = customtkinter.CTkComboBox(
+                row2_frame,
+                variable=self._input_var,
                 values=combobox_values,
-                width=30,
+                width=200,
                 state="readonly",
             )
             # Pre-populate with current value if it's in the list
@@ -579,22 +675,36 @@ class SettingRow(ttk.Frame):
         else:
             # Entry control
             if is_password:
-                self._input_control = ttk.Entry(
-                    row3, textvariable=self._input_var, width=30, show="*"
+                self._input_control = customtkinter.CTkEntry(
+                    row2_frame,
+                    textvariable=self._input_var,
+                    width=200,
+                    show="*",
+                    fg_color=COLOR_INPUT_BG,
+                    text_color=COLOR_TEXT,
                 )
             else:
-                self._input_control = ttk.Entry(
-                    row3, textvariable=self._input_var, width=30
+                self._input_control = customtkinter.CTkEntry(
+                    row2_frame,
+                    textvariable=self._input_var,
+                    width=200,
+                    fg_color=COLOR_INPUT_BG,
+                    text_color=COLOR_TEXT,
                 )
             # Pre-populate with current value (not masked — user edits raw)
             self._input_var.set(self._current_value)
 
-        self._input_control.pack(side="left", padx=(0, 5))
+        self._input_control.grid(row=0, column=0, sticky="w", padx=(0, WIDGET_INNER_SPACING))
 
-        self._apply_button = ttk.Button(
-            row3, text="Apply", command=self._on_apply_click
+        self._apply_button = customtkinter.CTkButton(
+            row2_frame,
+            text="Apply",
+            command=self._on_apply_click,
+            fg_color=COLOR_PRIMARY,
+            corner_radius=BUTTON_CORNER_RADIUS,
+            width=70,
         )
-        self._apply_button.pack(side="left")
+        self._apply_button.grid(row=0, column=1, sticky="w")
 
     def _on_apply_click(self) -> None:
         """Handle Apply button click — invokes the on_apply callback."""
@@ -625,7 +735,7 @@ class SettingRow(ttk.Frame):
         if is_modified:
             self._current_value_label.configure(font=self._bold_font)
         else:
-            self._current_value_label.configure(font="")
+            self._current_value_label.configure(font=self._normal_font)
 
         # Update the input control
         self._input_var.set(value)
