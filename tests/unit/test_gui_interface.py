@@ -918,7 +918,6 @@ class TestStatusDisplay:
         with patch.object(StatusDisplay, "__init__", lambda self, *args, **kwargs: None):
             sd = StatusDisplay.__new__(StatusDisplay)
             sd._idle_timeout_threshold = 600
-            sd._fields_frame = MagicMock()
             sd._field_widgets = []
             return sd
 

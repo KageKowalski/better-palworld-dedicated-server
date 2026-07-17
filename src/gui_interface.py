@@ -17,7 +17,20 @@ from tkinter import ttk
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+import customtkinter
+
 from src.config import WrapperConfig
+from src.gui_theme import (
+    BUTTON_CORNER_RADIUS,
+    COLOR_ACCENT,
+    COLOR_DISABLED,
+    COLOR_PRIMARY,
+    COLOR_TEXT,
+    COLOR_TEXT_SECONDARY,
+    FONT_BODY,
+    FONT_SUBHEADING,
+    WIDGET_INNER_SPACING,
+)
 from src.models import ServerState, WrapperStatus
 from src.pending_settings import ApplyResult
 from src.settings_panel import SettingsPanel
@@ -429,12 +442,12 @@ class GuiInterface:
                 pass
 
 
-class ControlPanel(ttk.LabelFrame):
+class ControlPanel(customtkinter.CTkFrame):
     """Server control buttons with state-aware enable/disable logic.
 
     Provides "Start Server", "Stop Server", and "Restart Server" buttons
-    arranged in a horizontal row. Button states update automatically based
-    on the current ServerState:
+    arranged in a horizontal row using grid layout. Button states update
+    automatically based on the current ServerState:
 
     - MONITORING: Start=enabled, Restart=enabled, Stop=disabled
     - RUNNING: Start=disabled, Stop=enabled, Restart=enabled
@@ -451,40 +464,64 @@ class ControlPanel(ttk.LabelFrame):
         """Initialize the ControlPanel.
 
         Args:
-            parent: The parent tkinter widget.
+            parent: The parent widget.
             on_start: Callback invoked when the "Start Server" button is clicked.
             on_stop: Callback invoked when the "Stop Server" button is clicked.
             on_restart: Callback invoked when the "Restart Server" button is clicked.
         """
-        super().__init__(parent, text="Server Control")
+        super().__init__(parent)
 
         self._on_start = on_start
         self._on_stop = on_stop
         self._on_restart = on_restart
 
-        # Button container frame for horizontal layout
-        button_frame = ttk.Frame(self)
-        button_frame.pack(fill="x", padx=5, pady=5)
+        # Configure grid columns with equal weight for uniform button sizing
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=1)
+        self.columnconfigure(2, weight=1)
 
-        # Create server control buttons
-        self._start_button = ttk.Button(
-            button_frame, text="Start Server", command=self._on_start
+        # Create server control buttons in row 0
+        self._start_button = customtkinter.CTkButton(
+            self,
+            text="Start Server",
+            command=self._on_start,
+            fg_color=COLOR_PRIMARY,
+            corner_radius=BUTTON_CORNER_RADIUS,
         )
-        self._start_button.pack(side="left", padx=(0, 5))
-
-        self._stop_button = ttk.Button(
-            button_frame, text="Stop Server", command=self._on_stop
+        self._start_button.grid(
+            row=0, column=0, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING, sticky="ew"
         )
-        self._stop_button.pack(side="left", padx=(0, 5))
 
-        self._restart_button = ttk.Button(
-            button_frame, text="Restart Server", command=self._on_restart
+        self._stop_button = customtkinter.CTkButton(
+            self,
+            text="Stop Server",
+            command=self._on_stop,
+            fg_color=COLOR_PRIMARY,
+            corner_radius=BUTTON_CORNER_RADIUS,
         )
-        self._restart_button.pack(side="left", padx=(0, 5))
+        self._stop_button.grid(
+            row=0, column=1, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING, sticky="ew"
+        )
 
-        # Loading indicator label (hidden by default)
-        self._loading_label = ttk.Label(self, text="Operation in progress...")
-        # Do not pack yet — shown only when set_loading(True) is called
+        self._restart_button = customtkinter.CTkButton(
+            self,
+            text="Restart Server",
+            command=self._on_restart,
+            fg_color=COLOR_PRIMARY,
+            corner_radius=BUTTON_CORNER_RADIUS,
+        )
+        self._restart_button.grid(
+            row=0, column=2, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING, sticky="ew"
+        )
+
+        # Loading indicator label in row 1 spanning all columns (hidden by default)
+        self._loading_label = customtkinter.CTkLabel(
+            self,
+            text="Operation in progress...",
+            text_color=COLOR_TEXT_SECONDARY,
+            font=FONT_BODY,
+        )
+        # Do not grid yet — shown only when set_loading(True) is called
 
         # Initialize with MONITORING state (default)
         self.update_button_states(ServerState.MONITORING)
@@ -501,19 +538,19 @@ class ControlPanel(ttk.LabelFrame):
             STARTING/STOPPING: All disabled, loading indicator shown
         """
         if state == ServerState.MONITORING:
-            self._start_button.configure(state="normal")
-            self._stop_button.configure(state="disabled")
-            self._restart_button.configure(state="normal")
+            self._start_button.configure(state="normal", fg_color=COLOR_PRIMARY)
+            self._stop_button.configure(state="disabled", fg_color=COLOR_DISABLED)
+            self._restart_button.configure(state="normal", fg_color=COLOR_PRIMARY)
             self._hide_loading()
         elif state == ServerState.RUNNING:
-            self._start_button.configure(state="disabled")
-            self._stop_button.configure(state="normal")
-            self._restart_button.configure(state="normal")
+            self._start_button.configure(state="disabled", fg_color=COLOR_DISABLED)
+            self._stop_button.configure(state="normal", fg_color=COLOR_PRIMARY)
+            self._restart_button.configure(state="normal", fg_color=COLOR_PRIMARY)
             self._hide_loading()
         elif state in (ServerState.STARTING, ServerState.STOPPING):
-            self._start_button.configure(state="disabled")
-            self._stop_button.configure(state="disabled")
-            self._restart_button.configure(state="disabled")
+            self._start_button.configure(state="disabled", fg_color=COLOR_DISABLED)
+            self._stop_button.configure(state="disabled", fg_color=COLOR_DISABLED)
+            self._restart_button.configure(state="disabled", fg_color=COLOR_DISABLED)
             self._show_loading()
 
     def set_loading(self, loading: bool) -> None:
@@ -525,20 +562,22 @@ class ControlPanel(ttk.LabelFrame):
                     updated separately via update_button_states()).
         """
         if loading:
-            self._start_button.configure(state="disabled")
-            self._stop_button.configure(state="disabled")
-            self._restart_button.configure(state="disabled")
+            self._start_button.configure(state="disabled", fg_color=COLOR_DISABLED)
+            self._stop_button.configure(state="disabled", fg_color=COLOR_DISABLED)
+            self._restart_button.configure(state="disabled", fg_color=COLOR_DISABLED)
             self._show_loading()
         else:
             self._hide_loading()
 
     def _show_loading(self) -> None:
-        """Show the loading indicator label."""
-        self._loading_label.pack(fill="x", padx=5, pady=(0, 5))
+        """Show the loading indicator label in row 1 spanning all columns."""
+        self._loading_label.grid(
+            row=1, column=0, columnspan=3, padx=WIDGET_INNER_SPACING, pady=(0, WIDGET_INNER_SPACING), sticky="ew"
+        )
 
     def _hide_loading(self) -> None:
         """Hide the loading indicator label."""
-        self._loading_label.pack_forget()
+        self._loading_label.grid_remove()
 
 
 class OutputPanel(ttk.LabelFrame):
@@ -701,16 +740,16 @@ class NotificationBar(ttk.Frame):
 
 
 
-class StatusDisplay(ttk.LabelFrame):
-    """Real-time server status display with conditional field visibility.
+class StatusDisplay(customtkinter.CTkFrame):
+    """Real-time server status display using CTkFrame with grid layout.
 
     Displays: State (uppercase), Player Count, Idle Timer status,
     Server PID (only when available), and Uptime (only when available).
 
-    Fields for Server PID and Uptime are completely omitted from the display
-    when their values are None, and shown when values are available.
-    The display is rebuilt on each update_status() call to handle the
-    conditional field presence cleanly.
+    Fields are arranged in a two-column grid (labels in column 0, values in
+    column 1). Server PID and Uptime rows are completely omitted when their
+    values are None. The display is rebuilt on each update_status() call to
+    handle the conditional field presence cleanly.
     """
 
     def __init__(self, parent: tk.Widget, idle_timeout_threshold: int) -> None:
@@ -721,16 +760,16 @@ class StatusDisplay(ttk.LabelFrame):
             idle_timeout_threshold: The configured idle timeout threshold in seconds,
                 used to display the idle timer format "{elapsed}s elapsed ({threshold}s threshold)".
         """
-        super().__init__(parent, text="Server Status")
+        super().__init__(parent, fg_color="transparent")
 
         self._idle_timeout_threshold = idle_timeout_threshold
 
-        # Container frame for the status fields (rebuilt on each update)
-        self._fields_frame = ttk.Frame(self)
-        self._fields_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        # Configure grid columns: labels fixed, values expand
+        self.columnconfigure(0, weight=0)
+        self.columnconfigure(1, weight=1)
 
-        # Track current field labels for cleanup on rebuild
-        self._field_widgets: list[ttk.Label] = []
+        # Track current field widgets for cleanup on rebuild
+        self._field_widgets: list[customtkinter.CTkLabel] = []
 
         # Show initial placeholder state
         self._build_fields(
@@ -784,7 +823,8 @@ class StatusDisplay(ttk.LabelFrame):
 
         Destroys existing field widgets and creates new ones based on current
         values. Conditional fields (PID, Uptime) are only created when their
-        values are not None.
+        values are not None. Uses a two-column grid with CTkLabel widgets
+        styled via Theme_Engine constants.
 
         Args:
             state: The server state text (uppercase).
@@ -801,43 +841,86 @@ class StatusDisplay(ttk.LabelFrame):
         row = 0
 
         # State field (always shown)
-        state_label = ttk.Label(self._fields_frame, text=f"State:        {state}")
-        state_label.grid(row=row, column=0, sticky="w", pady=(0, 2))
-        self._field_widgets.append(state_label)
+        state_value_color = COLOR_ACCENT if state == "RUNNING" else COLOR_TEXT
+        state_name_label = customtkinter.CTkLabel(
+            self, text="State:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
+        )
+        state_name_label.grid(
+            row=row, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
+        )
+        state_value_label = customtkinter.CTkLabel(
+            self, text=state, font=FONT_BODY, text_color=state_value_color
+        )
+        state_value_label.grid(
+            row=row, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
+        )
+        self._field_widgets.extend([state_name_label, state_value_label])
         row += 1
 
         # Player Count field (always shown)
-        players_label = ttk.Label(
-            self._fields_frame, text=f"Players:      {player_count}"
+        players_name_label = customtkinter.CTkLabel(
+            self, text="Players:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
         )
-        players_label.grid(row=row, column=0, sticky="w", pady=(0, 2))
-        self._field_widgets.append(players_label)
+        players_name_label.grid(
+            row=row, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
+        )
+        players_value_label = customtkinter.CTkLabel(
+            self, text=str(player_count), font=FONT_BODY, text_color=COLOR_TEXT
+        )
+        players_value_label.grid(
+            row=row, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
+        )
+        self._field_widgets.extend([players_name_label, players_value_label])
         row += 1
 
         # Idle Timer field (always shown, text varies)
-        idle_label = ttk.Label(
-            self._fields_frame, text=f"Idle Timer:   {idle_timer_text}"
+        idle_name_label = customtkinter.CTkLabel(
+            self, text="Idle Timer:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
         )
-        idle_label.grid(row=row, column=0, sticky="w", pady=(0, 2))
-        self._field_widgets.append(idle_label)
+        idle_name_label.grid(
+            row=row, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
+        )
+        idle_value_label = customtkinter.CTkLabel(
+            self, text=idle_timer_text, font=FONT_BODY, text_color=COLOR_TEXT
+        )
+        idle_value_label.grid(
+            row=row, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
+        )
+        self._field_widgets.extend([idle_name_label, idle_value_label])
         row += 1
 
         # Server PID field (conditional - only shown when not None)
         if server_pid is not None:
-            pid_label = ttk.Label(
-                self._fields_frame, text=f"Server PID:   {server_pid}"
+            pid_name_label = customtkinter.CTkLabel(
+                self, text="Server PID:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
             )
-            pid_label.grid(row=row, column=0, sticky="w", pady=(0, 2))
-            self._field_widgets.append(pid_label)
+            pid_name_label.grid(
+                row=row, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
+            )
+            pid_value_label = customtkinter.CTkLabel(
+                self, text=str(server_pid), font=FONT_BODY, text_color=COLOR_TEXT
+            )
+            pid_value_label.grid(
+                row=row, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
+            )
+            self._field_widgets.extend([pid_name_label, pid_value_label])
             row += 1
 
         # Uptime field (conditional - only shown when not None)
         if uptime_seconds is not None:
-            uptime_label = ttk.Label(
-                self._fields_frame, text=f"Uptime:       {uptime_seconds}s"
+            uptime_name_label = customtkinter.CTkLabel(
+                self, text="Uptime:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
             )
-            uptime_label.grid(row=row, column=0, sticky="w", pady=(0, 2))
-            self._field_widgets.append(uptime_label)
+            uptime_name_label.grid(
+                row=row, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
+            )
+            uptime_value_label = customtkinter.CTkLabel(
+                self, text=f"{uptime_seconds}s", font=FONT_BODY, text_color=COLOR_TEXT
+            )
+            uptime_value_label.grid(
+                row=row, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
+            )
+            self._field_widgets.extend([uptime_name_label, uptime_value_label])
             row += 1
 
 
