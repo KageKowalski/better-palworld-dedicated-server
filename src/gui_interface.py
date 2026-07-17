@@ -24,10 +24,12 @@ from src.gui_theme import (
     BUTTON_CORNER_RADIUS,
     COLOR_ACCENT,
     COLOR_DISABLED,
+    COLOR_INPUT_BG,
     COLOR_PRIMARY,
     COLOR_TEXT,
     COLOR_TEXT_SECONDARY,
     FONT_BODY,
+    FONT_MONO,
     FONT_SUBHEADING,
     WIDGET_INNER_SPACING,
 )
@@ -580,10 +582,10 @@ class ControlPanel(customtkinter.CTkFrame):
         self._loading_label.grid_remove()
 
 
-class OutputPanel(ttk.LabelFrame):
+class OutputPanel(customtkinter.CTkFrame):
     """Scrollable text area displaying operational log output.
 
-    Provides a read-only text widget that receives log messages via
+    Provides a read-only CTkTextbox widget that receives log messages via
     append_message(). Auto-scrolls to the latest entry. Maintains
     a maximum of 1000 lines to prevent unbounded memory growth.
 
@@ -599,21 +601,22 @@ class OutputPanel(ttk.LabelFrame):
         Args:
             parent: The parent tkinter widget.
         """
-        super().__init__(parent, text="Output")
+        super().__init__(parent, fg_color="transparent")
 
-        # Scrollbar on the right side
-        self._scrollbar = ttk.Scrollbar(self)
-        self._scrollbar.pack(side="right", fill="y")
+        # Grid layout - textbox fills the entire frame
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
 
-        # Read-only Text widget
-        self._text_widget = tk.Text(
+        # CTkTextbox replaces tk.Text + ttk.Scrollbar (CTkTextbox has built-in scrollbar)
+        self._text_widget = customtkinter.CTkTextbox(
             self,
-            wrap="word",
             state="disabled",
-            yscrollcommand=self._scrollbar.set,
+            font=FONT_MONO,
+            fg_color=COLOR_INPUT_BG,
+            text_color=COLOR_TEXT,
+            wrap="word",
         )
-        self._text_widget.pack(side="left", fill="both", expand=True)
-        self._scrollbar.configure(command=self._text_widget.yview)
+        self._text_widget.grid(row=0, column=0, sticky="nsew")
 
     def append_message(self, message: str) -> None:
         """Append a log message to the output panel.
