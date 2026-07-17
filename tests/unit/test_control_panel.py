@@ -36,12 +36,14 @@ def mock_ctk():
         mock_frame_cls = MagicMock()
         mock_ctk_module.CTkFrame = mock_frame_cls
 
-        # Set up mock CTkButton
+        # Set up mock CTkButton - each call returns a unique mock instance
         mock_button_cls = MagicMock()
+        mock_button_cls.side_effect = lambda *args, **kwargs: MagicMock()
         mock_ctk_module.CTkButton = mock_button_cls
 
-        # Set up mock CTkLabel
+        # Set up mock CTkLabel - each call returns a unique mock instance
         mock_label_cls = MagicMock()
+        mock_label_cls.side_effect = lambda *args, **kwargs: MagicMock()
         mock_ctk_module.CTkLabel = mock_label_cls
 
         yield mock_ctk_module

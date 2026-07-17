@@ -2619,7 +2619,7 @@ class TestOutputPanel:
 
         mock_textbox.insert = mock_insert
         mock_textbox.get = mock_get
-        mock_textbox.delete = mock_delete
+        mock_textbox.delete = MagicMock(side_effect=mock_delete)
         mock_textbox.index = mock_index
         mock_textbox.cget = mock_cget
         mock_textbox.configure = MagicMock()
