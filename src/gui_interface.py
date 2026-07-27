@@ -117,38 +117,45 @@ class GuiInterface:
         """Construct the complete GUI layout using grid geometry manager.
 
         Instantiates and arranges all GUI components in a vertical grid layout
-        with Card_Frame containers for visual grouping per Requirements 2.1-2.6
-        and 4.4-4.5.
+        with Card_Frame containers for visual grouping.
 
         Grid layout (top to bottom):
-        - Row 0: ControlPanel Card_Frame (weight=0, fixed)
-        - Row 1: StatusDisplay Card_Frame (weight=0, fixed)
-        - Row 2: OutputPanel Card_Frame (weight=1, expand)
-        - Row 3: SettingsPanel Card_Frame (weight=1, expand)
-        - Row 4: Button frame - Help and Quit (weight=0, fixed)
-        - Row 5: NotificationBar Card_Frame (weight=0, fixed)
+        - Row 0: Server Card_Frame (StatusDisplay left, ControlPanel right) (weight=0, fixed)
+        - Row 1: OutputPanel Card_Frame (weight=1, expand)
+        - Row 2: SettingsPanel Card_Frame (weight=1, expand)
+        - Row 3: Button frame - Help and Quit (weight=0, fixed)
+        - Row 4: NotificationBar Card_Frame (weight=0, fixed)
 
         All widget instances are stored as self._ attributes so
         _disable_all_controls() and other methods can access them.
         """
         # Configure root grid weights
         self._root.columnconfigure(0, weight=1)
-        self._root.rowconfigure(0, weight=0)  # ControlPanel
-        self._root.rowconfigure(1, weight=0)  # StatusDisplay
-        self._root.rowconfigure(2, weight=1)  # OutputPanel (expand)
-        self._root.rowconfigure(3, weight=1)  # SettingsPanel (expand)
-        self._root.rowconfigure(4, weight=0)  # Button frame
-        self._root.rowconfigure(5, weight=0)  # NotificationBar
+        self._root.rowconfigure(0, weight=0)  # Server (status + controls)
+        self._root.rowconfigure(1, weight=1)  # OutputPanel (expand)
+        self._root.rowconfigure(2, weight=1)  # SettingsPanel (expand)
+        self._root.rowconfigure(3, weight=0)  # Button frame
+        self._root.rowconfigure(4, weight=0)  # NotificationBar
 
-        # Row 0: Control Panel - Server lifecycle buttons
-        cp_card = create_card_frame(self._root)
-        cp_card.grid(row=0, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=(CARD_OUTER_MARGIN, CARD_OUTER_MARGIN // 2))
-        cp_card.columnconfigure(0, weight=1)
+        # Row 0: Unified Server Card — Status left, Controls right
+        server_card = create_card_frame(self._root)
+        server_card.grid(row=0, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=(CARD_OUTER_MARGIN, CARD_OUTER_MARGIN // 2))
+        server_card.columnconfigure(0, weight=1)  # Status side expands
+        server_card.columnconfigure(1, weight=0)  # Controls side fixed width
         customtkinter.CTkLabel(
-            cp_card, text="Server Controls", font=FONT_HEADING, text_color=COLOR_TEXT, anchor="w"
-        ).grid(row=0, column=0, sticky="ew", padx=CARD_INNER_PADDING, pady=(CARD_INNER_PADDING, 0))
+            server_card, text="Server", font=FONT_HEADING, text_color=COLOR_TEXT, anchor="w"
+        ).grid(row=0, column=0, columnspan=2, sticky="ew", padx=CARD_INNER_PADDING, pady=(CARD_INNER_PADDING, 0))
+
+        # Left side: Status Display
+        self._status_display = StatusDisplay(
+            server_card,
+            idle_timeout_threshold=self._config.idle_timeout_seconds,
+        )
+        self._status_display.grid(row=1, column=0, sticky="nsw", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
+
+        # Right side: Control Panel (vertically stacked buttons)
         self._control_panel = ControlPanel(
-            cp_card,
+            server_card,
             on_start=lambda: asyncio.create_task(
                 self._execute_server_operation("start")
             ),
@@ -159,24 +166,11 @@ class GuiInterface:
                 self._execute_server_operation("restart")
             ),
         )
-        self._control_panel.grid(row=1, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
+        self._control_panel.grid(row=1, column=1, sticky="nse", padx=(0, CARD_INNER_PADDING), pady=CARD_INNER_PADDING)
 
-        # Row 1: Status Display - Real-time status fields
-        sd_card = create_card_frame(self._root)
-        sd_card.grid(row=1, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
-        sd_card.columnconfigure(0, weight=1)
-        customtkinter.CTkLabel(
-            sd_card, text="Server Status", font=FONT_HEADING, text_color=COLOR_TEXT, anchor="w"
-        ).grid(row=0, column=0, sticky="ew", padx=CARD_INNER_PADDING, pady=(CARD_INNER_PADDING, 0))
-        self._status_display = StatusDisplay(
-            sd_card,
-            idle_timeout_threshold=self._config.idle_timeout_seconds,
-        )
-        self._status_display.grid(row=1, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
-
-        # Row 2: Output Panel - Operational log output
+        # Row 1: Output Panel - Operational log output
         op_card = create_card_frame(self._root)
-        op_card.grid(row=2, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
+        op_card.grid(row=1, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
         op_card.columnconfigure(0, weight=1)
         op_card.rowconfigure(1, weight=1)
         customtkinter.CTkLabel(
@@ -185,16 +179,16 @@ class GuiInterface:
         self._output_panel = OutputPanel(op_card)
         self._output_panel.grid(row=1, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
-        # NotificationBar created early (SettingsPanel needs it), placed at row 5 later
+        # NotificationBar created early (SettingsPanel needs it), placed at row 4 later
         nb_card = create_card_frame(self._root)
-        nb_card.grid(row=5, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=(CARD_OUTER_MARGIN // 2, CARD_OUTER_MARGIN))
+        nb_card.grid(row=4, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=(CARD_OUTER_MARGIN // 2, CARD_OUTER_MARGIN))
         nb_card.columnconfigure(0, weight=1)
         self._notification_bar = NotificationBar(nb_card)
         self._notification_bar.grid(row=0, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
-        # Row 3: SettingsPanel - Unified settings display and modification
+        # Row 2: SettingsPanel - Unified settings display and modification
         sp_card = create_card_frame(self._root)
-        sp_card.grid(row=3, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
+        sp_card.grid(row=2, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
         sp_card.columnconfigure(0, weight=1)
         sp_card.rowconfigure(1, weight=1)
         customtkinter.CTkLabel(
@@ -209,9 +203,9 @@ class GuiInterface:
         )
         self._settings_panel.grid(row=1, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
-        # Row 4: Button frame - Help and Quit buttons
+        # Row 3: Button frame - Help and Quit buttons
         button_frame = customtkinter.CTkFrame(self._root, fg_color="transparent")
-        button_frame.grid(row=4, column=0, sticky="ew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
+        button_frame.grid(row=3, column=0, sticky="ew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
 
         self._help_button = customtkinter.CTkButton(
             button_frame,
@@ -490,7 +484,7 @@ class ControlPanel(customtkinter.CTkFrame):
     """Server control buttons with state-aware enable/disable logic.
 
     Provides "Start Server", "Stop Server", and "Restart Server" buttons
-    arranged in a horizontal row using grid layout. Button states update
+    arranged in a vertical stack using grid layout. Button states update
     automatically based on the current ServerState:
 
     - MONITORING: Start=enabled, Restart=enabled, Stop=disabled
@@ -513,24 +507,23 @@ class ControlPanel(customtkinter.CTkFrame):
             on_stop: Callback invoked when the "Stop Server" button is clicked.
             on_restart: Callback invoked when the "Restart Server" button is clicked.
         """
-        super().__init__(parent)
+        super().__init__(parent, fg_color="transparent")
 
         self._on_start = on_start
         self._on_stop = on_stop
         self._on_restart = on_restart
 
-        # Configure grid columns with equal weight for uniform button sizing
-        self.columnconfigure(0, weight=1)
-        self.columnconfigure(1, weight=1)
-        self.columnconfigure(2, weight=1)
+        # Single column layout for vertically stacked buttons
+        self.columnconfigure(0, weight=0)
 
-        # Create server control buttons in row 0
+        # Create server control buttons stacked vertically (rows 0, 1, 2)
         self._start_button = customtkinter.CTkButton(
             self,
             text="Start Server",
             command=self._on_start,
             fg_color=COLOR_PRIMARY,
             corner_radius=BUTTON_CORNER_RADIUS,
+            width=150,
         )
         self._start_button.grid(
             row=0, column=0, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING, sticky="ew"
@@ -542,9 +535,10 @@ class ControlPanel(customtkinter.CTkFrame):
             command=self._on_stop,
             fg_color=COLOR_PRIMARY,
             corner_radius=BUTTON_CORNER_RADIUS,
+            width=150,
         )
         self._stop_button.grid(
-            row=0, column=1, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING, sticky="ew"
+            row=1, column=0, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING, sticky="ew"
         )
 
         self._restart_button = customtkinter.CTkButton(
@@ -553,12 +547,13 @@ class ControlPanel(customtkinter.CTkFrame):
             command=self._on_restart,
             fg_color=COLOR_PRIMARY,
             corner_radius=BUTTON_CORNER_RADIUS,
+            width=150,
         )
         self._restart_button.grid(
-            row=0, column=2, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING, sticky="ew"
+            row=2, column=0, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING, sticky="ew"
         )
 
-        # Loading indicator label in row 1 spanning all columns (hidden by default)
+        # Loading indicator label in row 3 (hidden by default)
         self._loading_label = customtkinter.CTkLabel(
             self,
             text="Operation in progress...",
@@ -614,9 +609,9 @@ class ControlPanel(customtkinter.CTkFrame):
             self._hide_loading()
 
     def _show_loading(self) -> None:
-        """Show the loading indicator label in row 1 spanning all columns."""
+        """Show the loading indicator label below the buttons."""
         self._loading_label.grid(
-            row=1, column=0, columnspan=3, padx=WIDGET_INNER_SPACING, pady=(0, WIDGET_INNER_SPACING), sticky="ew"
+            row=3, column=0, padx=WIDGET_INNER_SPACING, pady=(0, WIDGET_INNER_SPACING), sticky="ew"
         )
 
     def _hide_loading(self) -> None:
