@@ -125,16 +125,14 @@ class GuiInterface:
         for visual grouping. Supports a responsive layout:
 
         Narrow (< RESPONSIVE_BREAKPOINT):
-        - Row 0: Server Card (full width)
+        - Row 0: Server Card (full width) — Status | Controls | Help/Quit
         - Row 1: Content frame containing Output Log stacked above Settings
-        - Row 2: Button frame (Help + Quit)
-        - Row 3: NotificationBar
+        - Row 2: NotificationBar
 
         Wide (>= RESPONSIVE_BREAKPOINT):
-        - Row 0: Server Card (full width)
+        - Row 0: Server Card (full width) — Status | Controls | Help/Quit
         - Row 1: Content frame containing Output Log (left) + Settings (right) side-by-side
-        - Row 2: Button frame (Help + Quit)
-        - Row 3: NotificationBar
+        - Row 2: NotificationBar
 
         All widget instances are stored as self._ attributes so
         _disable_all_controls() and other methods can access them.
@@ -147,19 +145,19 @@ class GuiInterface:
         self._root.columnconfigure(0, weight=1)
         self._root.rowconfigure(0, weight=0)  # Server card
         self._root.rowconfigure(1, weight=1)  # Content frame (Output + Settings)
-        self._root.rowconfigure(2, weight=0)  # Button frame
-        self._root.rowconfigure(3, weight=0)  # NotificationBar
+        self._root.rowconfigure(2, weight=0)  # NotificationBar
 
-        # Row 0: Unified Server Card — all info in one horizontal row
+        # Row 0: Unified Server Card — Status | Controls | Help/Quit
         server_card = create_card_frame(self._root)
         server_card.grid(row=0, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=(CARD_OUTER_MARGIN, CARD_OUTER_MARGIN // 2))
         customtkinter.CTkLabel(
             server_card, text="Server", font=FONT_HEADING, text_color=COLOR_TEXT, anchor="w"
-        ).grid(row=0, column=0, columnspan=2, sticky="ew", padx=CARD_INNER_PADDING, pady=(CARD_INNER_PADDING, 0))
+        ).grid(row=0, column=0, columnspan=3, sticky="ew", padx=CARD_INNER_PADDING, pady=(CARD_INNER_PADDING, 0))
 
-        # Row 1 of server_card: Status + Controls in a single horizontal row
-        server_card.columnconfigure(0, weight=1)  # Status row expands
+        # Row 1 of server_card: Status + Controls + Help/Quit in a single horizontal row
+        server_card.columnconfigure(0, weight=1)  # Status expands
         server_card.columnconfigure(1, weight=0)  # Controls fixed
+        server_card.columnconfigure(2, weight=0)  # Help/Quit fixed
         self._status_display = StatusDisplay(
             server_card,
             idle_timeout_threshold=self._config.idle_timeout_seconds,
@@ -178,7 +176,31 @@ class GuiInterface:
                 self._execute_server_operation("restart")
             ),
         )
-        self._control_panel.grid(row=1, column=1, sticky="nse", padx=(0, CARD_INNER_PADDING), pady=CARD_INNER_PADDING)
+        self._control_panel.grid(row=1, column=1, sticky="nse", padx=WIDGET_INNER_SPACING, pady=CARD_INNER_PADDING)
+
+        # Help/Quit button group in column 2 of the server card
+        utility_frame = customtkinter.CTkFrame(server_card, fg_color="transparent")
+        utility_frame.grid(row=1, column=2, sticky="nse", padx=(WIDGET_INNER_SPACING, CARD_INNER_PADDING), pady=CARD_INNER_PADDING)
+
+        self._help_button = customtkinter.CTkButton(
+            utility_frame,
+            text="Help",
+            fg_color=COLOR_PRIMARY,
+            corner_radius=BUTTON_CORNER_RADIUS,
+            width=70,
+            command=lambda: HelpDialog(self._root),
+        )
+        self._help_button.grid(row=0, column=0, padx=(0, WIDGET_INNER_SPACING))
+
+        self._quit_button = customtkinter.CTkButton(
+            utility_frame,
+            text="Quit",
+            fg_color=COLOR_PRIMARY,
+            corner_radius=BUTTON_CORNER_RADIUS,
+            width=70,
+            command=self._on_close_request,
+        )
+        self._quit_button.grid(row=0, column=1)
 
         # Row 1: Content frame — holds Output Log and Settings panels
         # This frame is re-gridded by _apply_layout() based on window width
@@ -195,9 +217,9 @@ class GuiInterface:
         self._output_panel = OutputPanel(self._op_card)
         self._output_panel.grid(row=1, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
-        # NotificationBar created early (SettingsPanel needs it), placed at row 3 later
+        # NotificationBar created early (SettingsPanel needs it), placed at row 2
         nb_card = create_card_frame(self._root)
-        nb_card.grid(row=3, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=(CARD_OUTER_MARGIN // 2, CARD_OUTER_MARGIN))
+        nb_card.grid(row=2, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=(CARD_OUTER_MARGIN // 2, CARD_OUTER_MARGIN))
         nb_card.columnconfigure(0, weight=1)
         self._notification_bar = NotificationBar(nb_card)
         self._notification_bar.grid(row=0, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
@@ -217,28 +239,6 @@ class GuiInterface:
             notification_bar=self._notification_bar,
         )
         self._settings_panel.grid(row=1, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
-
-        # Row 2: Button frame - Help and Quit buttons
-        button_frame = customtkinter.CTkFrame(self._root, fg_color="transparent")
-        button_frame.grid(row=2, column=0, sticky="ew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
-
-        self._help_button = customtkinter.CTkButton(
-            button_frame,
-            text="Help",
-            fg_color=COLOR_PRIMARY,
-            corner_radius=BUTTON_CORNER_RADIUS,
-            command=lambda: HelpDialog(self._root),
-        )
-        self._help_button.grid(row=0, column=0, padx=(0, WIDGET_INNER_SPACING))
-
-        self._quit_button = customtkinter.CTkButton(
-            button_frame,
-            text="Quit",
-            fg_color=COLOR_PRIMARY,
-            corner_radius=BUTTON_CORNER_RADIUS,
-            command=self._on_close_request,
-        )
-        self._quit_button.grid(row=0, column=1)
 
         # Apply initial layout (narrow) and bind resize handler
         self._apply_layout(wide=False)
