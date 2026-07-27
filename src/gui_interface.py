@@ -113,47 +113,59 @@ class GuiInterface:
 
         self._build_ui()
 
+    # Width threshold (pixels) at which Output Log and Settings switch to side-by-side
+    RESPONSIVE_BREAKPOINT: int = 1200
+    # Hysteresis band to prevent flickering near the breakpoint
+    _HYSTERESIS: int = 50
+
     def _build_ui(self) -> None:
         """Construct the complete GUI layout using grid geometry manager.
 
-        Instantiates and arranges all GUI components in a vertical grid layout
-        with Card_Frame containers for visual grouping.
+        Instantiates and arranges all GUI components with Card_Frame containers
+        for visual grouping. Supports a responsive layout:
 
-        Grid layout (top to bottom):
-        - Row 0: Server Card_Frame (StatusDisplay left, ControlPanel right) (weight=0, fixed)
-        - Row 1: OutputPanel Card_Frame (weight=1, expand)
-        - Row 2: SettingsPanel Card_Frame (weight=1, expand)
-        - Row 3: Button frame - Help and Quit (weight=0, fixed)
-        - Row 4: NotificationBar Card_Frame (weight=0, fixed)
+        Narrow (< RESPONSIVE_BREAKPOINT):
+        - Row 0: Server Card (full width)
+        - Row 1: Content frame containing Output Log stacked above Settings
+        - Row 2: Button frame (Help + Quit)
+        - Row 3: NotificationBar
+
+        Wide (>= RESPONSIVE_BREAKPOINT):
+        - Row 0: Server Card (full width)
+        - Row 1: Content frame containing Output Log (left) + Settings (right) side-by-side
+        - Row 2: Button frame (Help + Quit)
+        - Row 3: NotificationBar
 
         All widget instances are stored as self._ attributes so
         _disable_all_controls() and other methods can access them.
         """
+        # Track current layout mode to avoid redundant re-gridding
+        self._is_wide_layout = False
+        self._resize_after_id: str | None = None
+
         # Configure root grid weights
         self._root.columnconfigure(0, weight=1)
-        self._root.rowconfigure(0, weight=0)  # Server (status + controls)
-        self._root.rowconfigure(1, weight=1)  # OutputPanel (expand)
-        self._root.rowconfigure(2, weight=1)  # SettingsPanel (expand)
-        self._root.rowconfigure(3, weight=0)  # Button frame
-        self._root.rowconfigure(4, weight=0)  # NotificationBar
+        self._root.rowconfigure(0, weight=0)  # Server card
+        self._root.rowconfigure(1, weight=1)  # Content frame (Output + Settings)
+        self._root.rowconfigure(2, weight=0)  # Button frame
+        self._root.rowconfigure(3, weight=0)  # NotificationBar
 
-        # Row 0: Unified Server Card — Status left, Controls right
+        # Row 0: Unified Server Card — all info in one horizontal row
         server_card = create_card_frame(self._root)
         server_card.grid(row=0, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=(CARD_OUTER_MARGIN, CARD_OUTER_MARGIN // 2))
-        server_card.columnconfigure(0, weight=1)  # Status side expands
-        server_card.columnconfigure(1, weight=0)  # Controls side fixed width
         customtkinter.CTkLabel(
             server_card, text="Server", font=FONT_HEADING, text_color=COLOR_TEXT, anchor="w"
         ).grid(row=0, column=0, columnspan=2, sticky="ew", padx=CARD_INNER_PADDING, pady=(CARD_INNER_PADDING, 0))
 
-        # Left side: Status Display
+        # Row 1 of server_card: Status + Controls in a single horizontal row
+        server_card.columnconfigure(0, weight=1)  # Status row expands
+        server_card.columnconfigure(1, weight=0)  # Controls fixed
         self._status_display = StatusDisplay(
             server_card,
             idle_timeout_threshold=self._config.idle_timeout_seconds,
         )
         self._status_display.grid(row=1, column=0, sticky="nsw", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
-        # Right side: Control Panel (vertically stacked buttons)
         self._control_panel = ControlPanel(
             server_card,
             on_start=lambda: asyncio.create_task(
@@ -168,34 +180,37 @@ class GuiInterface:
         )
         self._control_panel.grid(row=1, column=1, sticky="nse", padx=(0, CARD_INNER_PADDING), pady=CARD_INNER_PADDING)
 
-        # Row 1: Output Panel - Operational log output
-        op_card = create_card_frame(self._root)
-        op_card.grid(row=1, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
-        op_card.columnconfigure(0, weight=1)
-        op_card.rowconfigure(1, weight=1)
+        # Row 1: Content frame — holds Output Log and Settings panels
+        # This frame is re-gridded by _apply_layout() based on window width
+        self._content_frame = customtkinter.CTkFrame(self._root, fg_color="transparent")
+        self._content_frame.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
+
+        # Output Panel card
+        self._op_card = create_card_frame(self._content_frame)
+        self._op_card.columnconfigure(0, weight=1)
+        self._op_card.rowconfigure(1, weight=1)
         customtkinter.CTkLabel(
-            op_card, text="Output Log", font=FONT_HEADING, text_color=COLOR_TEXT, anchor="w"
+            self._op_card, text="Output Log", font=FONT_HEADING, text_color=COLOR_TEXT, anchor="w"
         ).grid(row=0, column=0, sticky="ew", padx=CARD_INNER_PADDING, pady=(CARD_INNER_PADDING, 0))
-        self._output_panel = OutputPanel(op_card)
+        self._output_panel = OutputPanel(self._op_card)
         self._output_panel.grid(row=1, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
-        # NotificationBar created early (SettingsPanel needs it), placed at row 4 later
+        # NotificationBar created early (SettingsPanel needs it), placed at row 3 later
         nb_card = create_card_frame(self._root)
-        nb_card.grid(row=4, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=(CARD_OUTER_MARGIN // 2, CARD_OUTER_MARGIN))
+        nb_card.grid(row=3, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=(CARD_OUTER_MARGIN // 2, CARD_OUTER_MARGIN))
         nb_card.columnconfigure(0, weight=1)
         self._notification_bar = NotificationBar(nb_card)
         self._notification_bar.grid(row=0, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
-        # Row 2: SettingsPanel - Unified settings display and modification
-        sp_card = create_card_frame(self._root)
-        sp_card.grid(row=2, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
-        sp_card.columnconfigure(0, weight=1)
-        sp_card.rowconfigure(1, weight=1)
+        # Settings Panel card
+        self._sp_card = create_card_frame(self._content_frame)
+        self._sp_card.columnconfigure(0, weight=1)
+        self._sp_card.rowconfigure(1, weight=1)
         customtkinter.CTkLabel(
-            sp_card, text="Server Settings", font=FONT_HEADING, text_color=COLOR_TEXT, anchor="w"
+            self._sp_card, text="Server Settings", font=FONT_HEADING, text_color=COLOR_TEXT, anchor="w"
         ).grid(row=0, column=0, sticky="ew", padx=CARD_INNER_PADDING, pady=(CARD_INNER_PADDING, 0))
         self._settings_panel = SettingsPanel(
-            parent=sp_card,
+            parent=self._sp_card,
             config=self._config,
             wrapper_core=self._wrapper_core,
             settings_write_handler=self._settings_write_handler,
@@ -203,9 +218,9 @@ class GuiInterface:
         )
         self._settings_panel.grid(row=1, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
-        # Row 3: Button frame - Help and Quit buttons
+        # Row 2: Button frame - Help and Quit buttons
         button_frame = customtkinter.CTkFrame(self._root, fg_color="transparent")
-        button_frame.grid(row=3, column=0, sticky="ew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
+        button_frame.grid(row=2, column=0, sticky="ew", padx=CARD_OUTER_MARGIN, pady=CARD_OUTER_MARGIN // 2)
 
         self._help_button = customtkinter.CTkButton(
             button_frame,
@@ -224,6 +239,90 @@ class GuiInterface:
             command=self._on_close_request,
         )
         self._quit_button.grid(row=0, column=1)
+
+        # Apply initial layout (narrow) and bind resize handler
+        self._apply_layout(wide=False)
+        self._root.bind("<Configure>", self._on_resize)
+
+    def _on_resize(self, event: tk.Event) -> None:
+        """Handle window resize events with debouncing.
+
+        Cancels any pending layout update and schedules a new one after 150ms
+        to avoid layout thrashing during continuous resize drags.
+        Only reacts to Configure events on the root window itself.
+        """
+        # Only respond to root window resize, not child widget events
+        if event.widget is not self._root:
+            return
+
+        if self._resize_after_id is not None:
+            self._root.after_cancel(self._resize_after_id)
+        self._resize_after_id = self._root.after(150, self._check_layout)
+
+    def _check_layout(self) -> None:
+        """Check window width and switch layout if breakpoint is crossed.
+
+        Uses hysteresis to prevent flickering: switches to wide at
+        RESPONSIVE_BREAKPOINT and back to narrow at RESPONSIVE_BREAKPOINT - _HYSTERESIS.
+        """
+        self._resize_after_id = None
+        try:
+            width = self._root.winfo_width()
+        except tk.TclError:
+            return  # Window destroyed
+
+        if not self._is_wide_layout and width >= self.RESPONSIVE_BREAKPOINT:
+            self._apply_layout(wide=True)
+        elif self._is_wide_layout and width < (self.RESPONSIVE_BREAKPOINT - self._HYSTERESIS):
+            self._apply_layout(wide=False)
+
+    def _apply_layout(self, wide: bool) -> None:
+        """Re-grid the Output Log and Settings panels based on layout mode.
+
+        Args:
+            wide: If True, place panels side-by-side (Output left, Settings right).
+                  If False, stack panels vertically (Output above Settings).
+        """
+        # Remove both cards from their current grid position
+        self._op_card.grid_forget()
+        self._sp_card.grid_forget()
+
+        # Reset content frame column/row configuration
+        self._content_frame.columnconfigure(0, weight=1)
+        self._content_frame.columnconfigure(1, weight=0)
+        self._content_frame.rowconfigure(0, weight=1)
+        self._content_frame.rowconfigure(1, weight=0)
+
+        if wide:
+            # Side-by-side: Output Log (left column), Settings (right column)
+            self._content_frame.columnconfigure(1, weight=1)
+            self._content_frame.rowconfigure(1, weight=0)
+            self._op_card.grid(
+                row=0, column=0, sticky="nsew",
+                padx=(CARD_OUTER_MARGIN, CARD_OUTER_MARGIN // 2),
+                pady=CARD_OUTER_MARGIN // 2,
+            )
+            self._sp_card.grid(
+                row=0, column=1, sticky="nsew",
+                padx=(CARD_OUTER_MARGIN // 2, CARD_OUTER_MARGIN),
+                pady=CARD_OUTER_MARGIN // 2,
+            )
+        else:
+            # Stacked: Output Log above Settings
+            self._content_frame.columnconfigure(1, weight=0)
+            self._content_frame.rowconfigure(1, weight=1)
+            self._op_card.grid(
+                row=0, column=0, sticky="nsew",
+                padx=CARD_OUTER_MARGIN,
+                pady=CARD_OUTER_MARGIN // 2,
+            )
+            self._sp_card.grid(
+                row=1, column=0, sticky="nsew",
+                padx=CARD_OUTER_MARGIN,
+                pady=CARD_OUTER_MARGIN // 2,
+            )
+
+        self._is_wide_layout = wide
 
     def _schedule_status_refresh(self) -> None:
         """Schedule periodic status display updates (every 1 second).
@@ -484,7 +583,7 @@ class ControlPanel(customtkinter.CTkFrame):
     """Server control buttons with state-aware enable/disable logic.
 
     Provides "Start Server", "Stop Server", and "Restart Server" buttons
-    arranged in a vertical stack using grid layout. Button states update
+    arranged in a single horizontal row using grid layout. Button states update
     automatically based on the current ServerState:
 
     - MONITORING: Start=enabled, Restart=enabled, Stop=disabled
@@ -513,17 +612,19 @@ class ControlPanel(customtkinter.CTkFrame):
         self._on_stop = on_stop
         self._on_restart = on_restart
 
-        # Single column layout for vertically stacked buttons
+        # Horizontal row layout — columns 0, 1, 2 for buttons
         self.columnconfigure(0, weight=0)
+        self.columnconfigure(1, weight=0)
+        self.columnconfigure(2, weight=0)
 
-        # Create server control buttons stacked vertically (rows 0, 1, 2)
+        # Create server control buttons in a single row
         self._start_button = customtkinter.CTkButton(
             self,
             text="Start Server",
             command=self._on_start,
             fg_color=COLOR_PRIMARY,
             corner_radius=BUTTON_CORNER_RADIUS,
-            width=150,
+            width=120,
         )
         self._start_button.grid(
             row=0, column=0, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING, sticky="ew"
@@ -535,10 +636,10 @@ class ControlPanel(customtkinter.CTkFrame):
             command=self._on_stop,
             fg_color=COLOR_PRIMARY,
             corner_radius=BUTTON_CORNER_RADIUS,
-            width=150,
+            width=120,
         )
         self._stop_button.grid(
-            row=1, column=0, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING, sticky="ew"
+            row=0, column=1, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING, sticky="ew"
         )
 
         self._restart_button = customtkinter.CTkButton(
@@ -547,13 +648,13 @@ class ControlPanel(customtkinter.CTkFrame):
             command=self._on_restart,
             fg_color=COLOR_PRIMARY,
             corner_radius=BUTTON_CORNER_RADIUS,
-            width=150,
+            width=120,
         )
         self._restart_button.grid(
-            row=2, column=0, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING, sticky="ew"
+            row=0, column=2, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING, sticky="ew"
         )
 
-        # Loading indicator label in row 3 (hidden by default)
+        # Loading indicator label in row 1 spanning all columns (hidden by default)
         self._loading_label = customtkinter.CTkLabel(
             self,
             text="Operation in progress...",
@@ -611,7 +712,7 @@ class ControlPanel(customtkinter.CTkFrame):
     def _show_loading(self) -> None:
         """Show the loading indicator label below the buttons."""
         self._loading_label.grid(
-            row=3, column=0, padx=WIDGET_INNER_SPACING, pady=(0, WIDGET_INNER_SPACING), sticky="ew"
+            row=1, column=0, columnspan=3, padx=WIDGET_INNER_SPACING, pady=(0, WIDGET_INNER_SPACING), sticky="ew"
         )
 
     def _hide_loading(self) -> None:
@@ -795,13 +896,12 @@ class NotificationBar(customtkinter.CTkFrame):
 class StatusDisplay(customtkinter.CTkFrame):
     """Real-time server status display using CTkFrame with grid layout.
 
-    Displays: State (uppercase), Player Count, Idle Timer status,
-    Server PID (only when available), and Uptime (only when available).
+    Displays: State (uppercase), Player Count, Idle Timer status in a single
+    horizontal row. Server PID and Uptime appear in a second row only when the
+    server is running.
 
-    Fields are arranged in a two-column grid (labels in column 0, values in
-    column 1). Always-visible fields (State, Players, Idle Timer) are created
-    once and updated in-place via configure() to avoid flicker. Conditional
-    fields (PID, Uptime) are shown/hidden as needed.
+    Always-visible fields are created once and updated in-place via configure()
+    to avoid flicker. Conditional fields (PID, Uptime) are shown/hidden as needed.
     """
 
     def __init__(self, parent: tk.Widget, idle_timeout_threshold: int) -> None:
@@ -816,69 +916,65 @@ class StatusDisplay(customtkinter.CTkFrame):
 
         self._idle_timeout_threshold = idle_timeout_threshold
 
-        # Configure grid columns: labels fixed, values expand
-        self.columnconfigure(0, weight=0)
-        self.columnconfigure(1, weight=1)
-
         # Track whether conditional fields are currently visible
         self._pid_visible = False
         self._uptime_visible = False
 
-        # --- Always-visible fields (created once, updated in-place) ---
-
-        # Row 0: State
+        # --- Row 0: Always-visible fields in a horizontal row ---
+        # Layout: [State: VALUE] [Players: VALUE] [Idle Timer: VALUE]
+        # Using columns 0-5 (label/value pairs)
+        col = 0
         self._state_name_label = customtkinter.CTkLabel(
             self, text="State:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
         )
         self._state_name_label.grid(
-            row=0, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
+            row=0, column=col, sticky="w", padx=(0, WIDGET_INNER_SPACING)
         )
+        col += 1
         self._state_value_label = customtkinter.CTkLabel(
             self, text="MONITORING", font=FONT_BODY, text_color=COLOR_TEXT
         )
         self._state_value_label.grid(
-            row=0, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
+            row=0, column=col, sticky="w", padx=(0, CARD_INNER_PADDING)
         )
+        col += 1
 
-        # Row 1: Players
         self._players_name_label = customtkinter.CTkLabel(
             self, text="Players:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
         )
         self._players_name_label.grid(
-            row=1, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
+            row=0, column=col, sticky="w", padx=(0, WIDGET_INNER_SPACING)
         )
+        col += 1
         self._players_value_label = customtkinter.CTkLabel(
             self, text="0", font=FONT_BODY, text_color=COLOR_TEXT
         )
         self._players_value_label.grid(
-            row=1, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
+            row=0, column=col, sticky="w", padx=(0, CARD_INNER_PADDING)
         )
+        col += 1
 
-        # Row 2: Idle Timer
         self._idle_name_label = customtkinter.CTkLabel(
             self, text="Idle Timer:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
         )
         self._idle_name_label.grid(
-            row=2, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
+            row=0, column=col, sticky="w", padx=(0, WIDGET_INNER_SPACING)
         )
+        col += 1
         self._idle_value_label = customtkinter.CTkLabel(
             self, text="Not active", font=FONT_BODY, text_color=COLOR_TEXT
         )
         self._idle_value_label.grid(
-            row=2, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
+            row=0, column=col, sticky="w"
         )
 
-        # --- Conditional fields (created once, shown/hidden via grid) ---
-
-        # Row 3: Server PID
+        # --- Row 1: Conditional fields (PID + Uptime) in a second horizontal row ---
         self._pid_name_label = customtkinter.CTkLabel(
-            self, text="Server PID:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
+            self, text="PID:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
         )
         self._pid_value_label = customtkinter.CTkLabel(
             self, text="", font=FONT_BODY, text_color=COLOR_TEXT
         )
-
-        # Row 4: Uptime
         self._uptime_name_label = customtkinter.CTkLabel(
             self, text="Uptime:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
         )
@@ -923,10 +1019,10 @@ class StatusDisplay(customtkinter.CTkFrame):
         if pid_should_show != self._pid_visible:
             if pid_should_show:
                 self._pid_name_label.grid(
-                    row=3, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
+                    row=1, column=0, sticky="w", pady=(WIDGET_INNER_SPACING, 0), padx=(0, WIDGET_INNER_SPACING)
                 )
                 self._pid_value_label.grid(
-                    row=3, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
+                    row=1, column=1, sticky="w", pady=(WIDGET_INNER_SPACING, 0), padx=(0, CARD_INNER_PADDING)
                 )
             else:
                 self._pid_name_label.grid_remove()
@@ -941,10 +1037,10 @@ class StatusDisplay(customtkinter.CTkFrame):
         if uptime_should_show != self._uptime_visible:
             if uptime_should_show:
                 self._uptime_name_label.grid(
-                    row=4, column=0, sticky="w", pady=(0, WIDGET_INNER_SPACING), padx=(0, WIDGET_INNER_SPACING)
+                    row=1, column=2, sticky="w", pady=(WIDGET_INNER_SPACING, 0), padx=(0, WIDGET_INNER_SPACING)
                 )
                 self._uptime_value_label.grid(
-                    row=4, column=1, sticky="w", pady=(0, WIDGET_INNER_SPACING)
+                    row=1, column=3, sticky="w", pady=(WIDGET_INNER_SPACING, 0), padx=(0, CARD_INNER_PADDING)
                 )
             else:
                 self._uptime_name_label.grid_remove()

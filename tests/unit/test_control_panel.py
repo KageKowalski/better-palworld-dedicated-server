@@ -128,12 +128,13 @@ class TestControlPanelInit:
         loading_call = [c for c in calls if c[1].get("text") == "Operation in progress..."]
         assert loading_call[0][1].get("text_color") == COLOR_TEXT_SECONDARY
 
-    def test_grid_column_configured_for_vertical_layout(self, control_panel):
-        """ControlPanel should configure 1 column (vertical stacking)."""
+    def test_grid_columns_configured_for_horizontal_layout(self, control_panel):
+        """ControlPanel should configure 3 columns (horizontal row)."""
         columnconfigure_calls = control_panel.columnconfigure.call_args_list
-        assert len(columnconfigure_calls) == 1
-        assert columnconfigure_calls[0][0][0] == 0
-        assert columnconfigure_calls[0][1].get("weight") == 0
+        assert len(columnconfigure_calls) == 3
+        for i, call in enumerate(columnconfigure_calls):
+            assert call[0][0] == i
+            assert call[1].get("weight") == 0
 
 
 class TestControlPanelButtonStates:
@@ -246,29 +247,29 @@ class TestControlPanelCallbacks:
 
 
 class TestControlPanelGridLayout:
-    """Tests for grid-based layout (vertically stacked buttons)."""
+    """Tests for grid-based layout (horizontal button row)."""
 
-    def test_start_button_in_row_0(self, control_panel):
+    def test_start_button_in_column_0(self, control_panel):
         """Start button should be placed in row 0, column 0."""
         grid_call = control_panel._start_button.grid.call_args
         assert grid_call[1].get("row") == 0
         assert grid_call[1].get("column") == 0
 
-    def test_stop_button_in_row_1(self, control_panel):
-        """Stop button should be placed in row 1, column 0."""
+    def test_stop_button_in_column_1(self, control_panel):
+        """Stop button should be placed in row 0, column 1."""
         grid_call = control_panel._stop_button.grid.call_args
-        assert grid_call[1].get("row") == 1
-        assert grid_call[1].get("column") == 0
+        assert grid_call[1].get("row") == 0
+        assert grid_call[1].get("column") == 1
 
-    def test_restart_button_in_row_2(self, control_panel):
-        """Restart button should be placed in row 2, column 0."""
+    def test_restart_button_in_column_2(self, control_panel):
+        """Restart button should be placed in row 0, column 2."""
         grid_call = control_panel._restart_button.grid.call_args
-        assert grid_call[1].get("row") == 2
-        assert grid_call[1].get("column") == 0
+        assert grid_call[1].get("row") == 0
+        assert grid_call[1].get("column") == 2
 
-    def test_loading_label_in_row_3_when_shown(self, control_panel):
-        """Loading label should be in row 3 when shown."""
+    def test_loading_label_spans_all_columns_when_shown(self, control_panel):
+        """Loading label should span 3 columns in row 1 when shown."""
         control_panel._show_loading()
         grid_call = control_panel._loading_label.grid.call_args
-        assert grid_call[1].get("row") == 3
-        assert grid_call[1].get("column") == 0
+        assert grid_call[1].get("row") == 1
+        assert grid_call[1].get("columnspan") == 3
