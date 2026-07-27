@@ -11,17 +11,17 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import customtkinter
 
-# === Colors (Palworld Palette) ===
-COLOR_BASE_BG: str = "#0b1626"          # Dark Navy — window & base background
-COLOR_CARD_BG: str = "#1a2a3f"          # Card background (lighter than base)
-COLOR_PRIMARY: str = "#1b66df"          # Vibrant Blue — buttons, focus borders
-COLOR_ACCENT: str = "#ffd400"           # Bright Yellow — running state, pending, headers
-COLOR_ALERT: str = "#f73f00"            # Deep Orange/Red — errors
-COLOR_TEXT: str = "#ffffff"             # White — primary text
-COLOR_TEXT_SECONDARY: str = "#b0b8c4"   # Muted text for descriptions
-COLOR_DISABLED: str = "#4a4a4a"         # Gray — disabled buttons
-COLOR_SUCCESS: str = "#2ecc71"          # Green — success notifications
-COLOR_INPUT_BG: str = "#253a54"         # Text area / input background
+# === Colors (Dark Executive Theme) ===
+COLOR_BASE_BG: str = "#1a1a2e"          # Deep charcoal — window & base background
+COLOR_CARD_BG: str = "#252540"          # Elevated surface — card background
+COLOR_PRIMARY: str = "#5b7fb5"          # Steel blue — buttons, focus borders
+COLOR_ACCENT: str = "#7ec8e3"           # Soft cyan — running state, category headers
+COLOR_ALERT: str = "#e05555"            # Muted red — errors
+COLOR_TEXT: str = "#e8e8ec"             # Off-white — primary text (less harsh than pure white)
+COLOR_TEXT_SECONDARY: str = "#9a9ab0"   # Muted lavender-gray — descriptions
+COLOR_DISABLED: str = "#3d3d56"         # Dark gray-purple — disabled buttons
+COLOR_SUCCESS: str = "#5cb885"          # Muted green — success notifications
+COLOR_INPUT_BG: str = "#2a2a45"         # Slightly lighter than card — input fields
 
 # === Font Families ===
 FONT_FAMILY_PRIMARY: tuple[str, ...] = ("Segoe UI", "Inter", "sans-serif")
