@@ -187,20 +187,20 @@ class GuiInterface:
             text="Help",
             fg_color=COLOR_PRIMARY,
             corner_radius=BUTTON_CORNER_RADIUS,
-            width=70,
+            width=120,
             command=lambda: HelpDialog(self._root),
         )
-        self._help_button.grid(row=0, column=0, padx=(0, WIDGET_INNER_SPACING))
+        self._help_button.grid(row=0, column=0, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING)
 
         self._quit_button = customtkinter.CTkButton(
             utility_frame,
             text="Quit",
             fg_color=COLOR_PRIMARY,
             corner_radius=BUTTON_CORNER_RADIUS,
-            width=70,
+            width=120,
             command=self._on_close_request,
         )
-        self._quit_button.grid(row=0, column=1)
+        self._quit_button.grid(row=0, column=1, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING)
 
         # Row 1: Content frame — holds Output Log and Settings panels
         # This frame is re-gridded by _apply_layout() based on window width
