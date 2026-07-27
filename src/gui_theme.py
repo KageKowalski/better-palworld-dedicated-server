@@ -21,7 +21,7 @@ COLOR_TEXT: str = "#e8e8ec"             # Off-white — primary text (less harsh
 COLOR_TEXT_SECONDARY: str = "#9a9ab0"   # Muted lavender-gray — descriptions
 COLOR_DISABLED: str = "#3d3d56"         # Dark gray-purple — disabled buttons
 COLOR_SUCCESS: str = "#5cb885"          # Muted green — success notifications
-COLOR_INPUT_BG: str = "#2a2a45"         # Slightly lighter than card — input fields
+COLOR_INPUT_BG: str = "#353555"         # Lighter than card — input fields, text areas
 
 # === Font Families ===
 FONT_FAMILY_PRIMARY: tuple[str, ...] = ("Segoe UI", "Inter", "sans-serif")
