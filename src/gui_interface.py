@@ -250,9 +250,22 @@ class GuiInterface:
         Cancels any pending layout update and schedules a new one after 150ms
         to avoid layout thrashing during continuous resize drags.
         Only reacts to Configure events on the root window itself.
+        Ignores events triggered by minimize/maximize state transitions to
+        prevent expensive layout recalculation during window state changes.
         """
         # Only respond to root window resize, not child widget events
         if event.widget is not self._root:
+            return
+
+        # Skip layout recalculation during minimize/maximize/restore transitions.
+        # wm_state() returns "iconic" (minimized), "zoomed" (maximized on Windows),
+        # or "normal". We only recalculate layout in "normal" state to avoid
+        # expensive geometry passes on state transitions.
+        try:
+            state = self._root.wm_state()
+        except tk.TclError:
+            return  # Window destroyed
+        if state in ("iconic", "withdrawn"):
             return
 
         if self._resize_after_id is not None:
@@ -264,9 +277,13 @@ class GuiInterface:
 
         Uses hysteresis to prevent flickering: switches to wide at
         RESPONSIVE_BREAKPOINT and back to narrow at RESPONSIVE_BREAKPOINT - _HYSTERESIS.
+        Skips recalculation if the window is minimized or destroyed.
         """
         self._resize_after_id = None
         try:
+            state = self._root.wm_state()
+            if state in ("iconic", "withdrawn"):
+                return
             width = self._root.winfo_width()
         except tk.TclError:
             return  # Window destroyed
@@ -349,30 +366,36 @@ class GuiInterface:
 
         Calls WrapperCore.get_status() and updates the StatusDisplay and
         ControlPanel widgets if they exist. Reschedules itself every 1 second
-        unless a shutdown is in progress.
+        unless a shutdown is in progress. Skips widget updates when the window
+        is minimized to avoid unnecessary rendering overhead.
         """
         if self._gui_state.shutdown_in_progress:
             return
 
         try:
-            status = self._wrapper_core.get_status()
+            # Skip widget updates when minimized — no visual output is visible
+            state = self._root.wm_state()
+            if state not in ("iconic", "withdrawn"):
+                status = self._wrapper_core.get_status()
 
-            # Update StatusDisplay if it exists
-            if hasattr(self, "_status_display") and self._status_display is not None:
-                self._status_display.update_status(status)
+                # Update StatusDisplay if it exists
+                if hasattr(self, "_status_display") and self._status_display is not None:
+                    self._status_display.update_status(status)
 
-            # Update ControlPanel button states if it exists and no operation in progress
-            if (
-                hasattr(self, "_control_panel")
-                and self._control_panel is not None
-                and not self._gui_state.operation_in_progress
-            ):
-                self._control_panel.update_button_states(status.server_state)
+                # Update ControlPanel button states if it exists and no operation in progress
+                if (
+                    hasattr(self, "_control_panel")
+                    and self._control_panel is not None
+                    and not self._gui_state.operation_in_progress
+                ):
+                    self._control_panel.update_button_states(status.server_state)
 
-            # Update pending indicator in settings panel
-            if hasattr(self, "_settings_panel") and self._settings_panel is not None:
-                self._settings_panel.update_pending_indicator()
+                # Update pending indicator in settings panel
+                if hasattr(self, "_settings_panel") and self._settings_panel is not None:
+                    self._settings_panel.update_pending_indicator()
 
+        except tk.TclError:
+            return  # Window destroyed
         except Exception as e:
             logger.error("Error refreshing status: %s", e)
 
@@ -388,6 +411,10 @@ class GuiInterface:
         background tasks (REST API polling, idle timer, maintenance timer, connection
         listener) to continue executing on schedule.
 
+        When the window is minimized, the update interval is reduced to ~200ms
+        to avoid unnecessary CPU usage and prevent buildup of geometry events
+        that would all fire at once upon restore.
+
         The loop continues until self._running is set to False (via _shutdown())
         or the window is destroyed externally.
         """
@@ -401,7 +428,15 @@ class GuiInterface:
                 # Window has been destroyed (e.g., user closed it or shutdown completed)
                 break
 
-            await asyncio.sleep(0.033)
+            # Throttle when minimized — no visible updates needed
+            try:
+                state = self._root.wm_state()
+            except tk.TclError:
+                break
+            if state in ("iconic", "withdrawn"):
+                await asyncio.sleep(0.2)
+            else:
+                await asyncio.sleep(0.033)
 
     def _on_close_request(self) -> None:
         """Handle the WM_DELETE_WINDOW event (user clicks window close button).
