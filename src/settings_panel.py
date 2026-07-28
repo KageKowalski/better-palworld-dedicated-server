@@ -615,6 +615,7 @@ class SettingRow(customtkinter.CTkFrame):
             )
 
         current_font = self._bold_font if is_modified else self._normal_font
+        current_color = COLOR_TEXT if is_modified else COLOR_TEXT_SECONDARY
 
         customtkinter.CTkLabel(
             row1_frame, text="Current:", font=FONT_BODY,
@@ -622,7 +623,7 @@ class SettingRow(customtkinter.CTkFrame):
         ).grid(row=0, column=4, sticky="w", padx=(0, 2))
         self._current_value_label = customtkinter.CTkLabel(
             row1_frame, text=current_display, font=current_font,
-            text_color=COLOR_TEXT, anchor="w",
+            text_color=current_color, anchor="w",
         )
         self._current_value_label.grid(row=0, column=5, sticky="w")
 
@@ -732,9 +733,13 @@ class SettingRow(customtkinter.CTkFrame):
             )
 
         if is_modified:
-            self._current_value_label.configure(font=self._bold_font)
+            self._current_value_label.configure(
+                font=self._bold_font, text_color=COLOR_TEXT
+            )
         else:
-            self._current_value_label.configure(font=self._normal_font)
+            self._current_value_label.configure(
+                font=self._normal_font, text_color=COLOR_TEXT_SECONDARY
+            )
 
         # Update the input control
         self._input_var.set(value)
