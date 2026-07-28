@@ -31,12 +31,13 @@ class WrapperLogger:
     """Provides structured logging with rotating file output and
     optional additional handlers for console or GUI output.
 
-    All log entries include ISO 8601 timestamps. Log files rotate at a
-    configurable size limit with a configurable number of backups retained.
+    All log entries include human-readable timestamps (12-hour format with
+    AM/PM). Log files rotate at a configurable size limit with a configurable
+    number of backups retained.
     """
 
     _FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
-    _DATEFMT = "%Y-%m-%dT%H:%M:%S%z"
+    _DATEFMT = "%Y-%m-%d %I:%M:%S %p"
 
     def __init__(self) -> None:
         self._logger: logging.Logger = logging.getLogger("src")
@@ -45,9 +46,8 @@ class WrapperLogger:
 
     @classmethod
     def _make_formatter(cls) -> logging.Formatter:
-        """Create a standard log formatter with ISO 8601 timestamps."""
+        """Create a standard log formatter with human-readable timestamps."""
         formatter = logging.Formatter(fmt=cls._FORMAT, datefmt=cls._DATEFMT)
-        formatter.default_time_format = "%Y-%m-%dT%H:%M:%S"
         formatter.default_msec_format = None
         return formatter
 
