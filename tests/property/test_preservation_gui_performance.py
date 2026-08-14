@@ -90,6 +90,10 @@ def _create_panel(settings_file: Path):
 
     mock_scrollable = MagicMock()
     mock_scrollable.columnconfigure = MagicMock()
+    # Mock the internal canvas for scroll position detection
+    mock_canvas = MagicMock()
+    mock_canvas.yview.return_value = (0.0, 1.0)
+    mock_scrollable._parent_canvas = mock_canvas
 
     panel = SettingsPanel.__new__(SettingsPanel)
     panel._config = config
@@ -102,6 +106,14 @@ def _create_panel(settings_file: Path):
     panel._search_var = mock_var
     panel._scrollable_frame = mock_scrollable
     panel._pending_indicator = MagicMock()
+
+    # Virtualization attributes
+    panel._all_rows_data = []
+    panel._visible_rows_data = []
+    panel._widget_pool = []
+    panel._pool_assignments = {}
+    panel._viewport_start = 0
+    panel._viewport_end = 0
 
     return panel
 
@@ -489,12 +501,15 @@ class TestPreservationErrorHandling:
 
                 panel = _create_panel(settings_file)
 
-                # Do initial refresh to populate rows
+                # Do initial refresh to populate data model
                 panel.refresh()
-                initial_row_count = len(panel._setting_rows)
-                initial_row_keys = [row.key for row in panel._setting_rows]
+                initial_data_count = len(panel._all_rows_data)
+                initial_setting_keys = [
+                    row["key"] for row in panel._all_rows_data
+                    if row["type"] == "setting"
+                ]
 
-                assert initial_row_count > 0, "Initial refresh should create rows"
+                assert initial_data_count > 0, "Initial refresh should populate data model"
 
                 # Now simulate a read error on next refresh
                 with patch("src.settings_panel.SettingsParser.read_settings") as mock_read:
@@ -502,14 +517,17 @@ class TestPreservationErrorHandling:
 
                     panel.refresh()
 
-                # Rows should be preserved (not destroyed)
-                assert len(panel._setting_rows) == initial_row_count, (
-                    f"Rows changed after error refresh: "
-                    f"had {initial_row_count}, now {len(panel._setting_rows)}"
+                # Data model should be preserved (not cleared)
+                assert len(panel._all_rows_data) == initial_data_count, (
+                    f"Data model changed after error refresh: "
+                    f"had {initial_data_count}, now {len(panel._all_rows_data)}"
                 )
-                current_keys = [row.key for row in panel._setting_rows]
-                assert current_keys == initial_row_keys, (
-                    "Row keys changed after error refresh"
+                current_setting_keys = [
+                    row["key"] for row in panel._all_rows_data
+                    if row["type"] == "setting"
+                ]
+                assert current_setting_keys == initial_setting_keys, (
+                    "Setting keys changed after error refresh"
                 )
 
                 # Error notification should have been shown
