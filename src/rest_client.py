@@ -97,9 +97,16 @@ class RestClient:
 
                 try:
                     data = await response.json()
-                except (aiohttp.ContentTypeError, ValueError) as e:
-                    logger.warning("REST API JSON parse failure for %s %s: %s", method, path, e)
-                    return (False, None, f"JSON parse failure: {e}")
+                except (aiohttp.ContentTypeError, ValueError):
+                    # Some endpoints (e.g., /shutdown, /stop) return 200 with
+                    # text/plain instead of JSON. A 200 status is sufficient
+                    # to confirm the request succeeded.
+                    logger.debug(
+                        "REST API response for %s %s is not JSON (200 OK, "
+                        "content-type: %s) — treating as success",
+                        method, path, response.content_type,
+                    )
+                    return (True, {}, None)
 
                 return (True, data, None)
 

@@ -64,13 +64,23 @@ class TestRequest:
 
     async def test_connection_error_returns_error_tuple(self) -> None:
         client = RestClient(password="test")
-        # No server running, so connection will be refused
+
+        mock_context = AsyncMock()
+        mock_context.__aenter__ = AsyncMock(
+            side_effect=aiohttp.ClientConnectionError("Connection refused")
+        )
+
+        mock_session = AsyncMock(spec=aiohttp.ClientSession)
+        mock_session.closed = False
+        mock_session.request.return_value = mock_context
+
+        client._session = mock_session
+
         success, data, error = await client._request("GET", "/info")
         assert success is False
         assert data is None
         assert error is not None
-        assert "Connection error" in error or "Client error" in error
-        await client.close()
+        assert "Connection error" in error
 
     async def test_timeout_returns_error_tuple(self) -> None:
         client = RestClient(password="test")
@@ -152,11 +162,13 @@ class TestRequest:
         assert "500" in error
         assert "Internal server error" in error
 
-    async def test_json_parse_failure_returns_error(self) -> None:
+    async def test_non_json_200_response_returns_success(self) -> None:
+        """Endpoints like /shutdown return text/plain with 200 — treat as success."""
         client = RestClient(password="test")
 
         mock_response = AsyncMock()
         mock_response.status = 200
+        mock_response.content_type = "text/plain;charset=utf-8"
         mock_response.json = AsyncMock(
             side_effect=aiohttp.ContentTypeError(
                 MagicMock(), MagicMock(), message="not json"
@@ -172,10 +184,10 @@ class TestRequest:
 
         client._session = mock_session
 
-        success, data, error = await client._request("GET", "/info")
-        assert success is False
-        assert data is None
-        assert "parse failure" in error.lower() or "JSON" in error
+        success, data, error = await client._request("POST", "/shutdown")
+        assert success is True
+        assert data == {}
+        assert error is None
 
     async def test_successful_request_returns_data(self) -> None:
         client = RestClient(password="test")

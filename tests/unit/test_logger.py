@@ -7,8 +7,8 @@ from pathlib import Path
 from src.logger import GuiLogHandler, WrapperLogger
 
 
-# ISO 8601 timestamp pattern (e.g., 2024-01-15T10:30:00+0000)
-ISO_8601_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+# Human-readable timestamp pattern (e.g., 2024-01-15 03:30:00 PM)
+TIMESTAMP_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [AP]M")
 
 
 class TestWrapperLoggerSetup:
@@ -69,7 +69,7 @@ class TestWrapperLoggerStateTransition:
         logger.log_state_transition("RUNNING", "STOPPING")
 
         content = log_file.read_text(encoding="utf-8")
-        assert ISO_8601_PATTERN.search(content) is not None
+        assert TIMESTAMP_PATTERN.search(content) is not None
 
     def test_log_state_transition_uses_info_level(self, tmp_path: Path) -> None:
         log_file = tmp_path / "test.log"
@@ -113,7 +113,7 @@ class TestWrapperLoggerPlayerEvent:
         logger.log_player_event("connected", 1)
 
         content = log_file.read_text(encoding="utf-8")
-        assert ISO_8601_PATTERN.search(content) is not None
+        assert TIMESTAMP_PATTERN.search(content) is not None
 
 
 class TestWrapperLoggerError:
@@ -164,7 +164,7 @@ class TestWrapperLoggerError:
         logger.log_error("Operation failed", error)
 
         content = log_file.read_text(encoding="utf-8")
-        assert ISO_8601_PATTERN.search(content) is not None
+        assert TIMESTAMP_PATTERN.search(content) is not None
 
 
 
@@ -308,7 +308,7 @@ class TestGuiLogHandler:
         handler = GuiLogHandler(messages.append)
         formatter = logging.Formatter(
             fmt="%(asctime)s [%(levelname)s] %(message)s",
-            datefmt="%Y-%m-%dT%H:%M:%S%z",
+            datefmt="%Y-%m-%d %I:%M:%S %p",
         )
         handler.setFormatter(formatter)
 

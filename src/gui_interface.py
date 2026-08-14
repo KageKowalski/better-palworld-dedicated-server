@@ -1,9 +1,9 @@
 """GUI Management Interface for the Palworld Server Wrapper.
 
-Provides a tkinter-based graphical interface for interacting with the wrapper.
-Integrates with asyncio via cooperative scheduling (periodic root.update()
-calls from an asyncio coroutine), ensuring neither the tkinter event loop
-nor the asyncio event loop is blocked for more than ~33ms.
+Provides a CustomTkinter-based graphical interface for interacting with the
+wrapper. Integrates with asyncio via cooperative scheduling (periodic
+root.update() calls from an asyncio coroutine), ensuring neither the GUI
+event loop nor the asyncio event loop is blocked for more than ~33ms.
 
 This module mirrors the role of ManagementInterface but with a graphical
 window instead of a CLI prompt.
@@ -13,17 +13,36 @@ import asyncio
 import logging
 import sys
 import tkinter as tk
-from tkinter import ttk
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+import customtkinter
+
 from src.config import WrapperConfig
+from src.gui_theme import (
+    BUTTON_CORNER_RADIUS,
+    CARD_INNER_PADDING,
+    CARD_OUTER_MARGIN,
+    COLOR_ACCENT,
+    COLOR_ALERT,
+    COLOR_BASE_BG,
+    COLOR_DISABLED,
+    COLOR_INPUT_BG,
+    COLOR_PRIMARY,
+    COLOR_SUCCESS,
+    COLOR_TEXT,
+    COLOR_TEXT_SECONDARY,
+    FONT_BODY,
+    FONT_HEADING,
+    FONT_MONO,
+    FONT_SUBHEADING,
+    WIDGET_INNER_SPACING,
+    create_card_frame,
+)
 from src.models import ServerState, WrapperStatus
 from src.pending_settings import ApplyResult
 from src.settings_panel import SettingsPanel
-from src.settings_parser import SettingsParser
 from src.settings_write_handler import SettingsWriteHandler
-from src.validation import CorrectionResult, PASSWORD_MASK, is_password_setting, validate_and_correct
 from src.wrapper_core import WrapperCore
 
 logger = logging.getLogger(__name__)
@@ -48,7 +67,7 @@ class GuiState:
 
 
 class GuiInterface:
-    """tkinter-based GUI management interface for the Palworld Server Wrapper.
+    """CustomTkinter-based GUI management interface for the Palworld Server Wrapper.
 
     Integrates with asyncio via cooperative scheduling (periodic root.update()
     calls from an asyncio coroutine). The run() method is an async coroutine
@@ -58,15 +77,16 @@ class GuiInterface:
     def __init__(self, wrapper_core: WrapperCore, config: WrapperConfig) -> None:
         """Initialize the GUI interface.
 
-        Creates the tkinter root window with title "Palworld Server Wrapper"
-        and minimum size 800x600. Wires WM_DELETE_WINDOW to _shutdown().
+        Creates the customtkinter CTk root window with appearance mode "dark",
+        color theme "blue", title "Palworld Server Wrapper", and minimum size
+        800x600. Wires WM_DELETE_WINDOW to _shutdown().
 
         Args:
             wrapper_core: The WrapperCore instance for command execution.
             config: The wrapper configuration.
 
         Raises:
-            SystemExit: If tkinter cannot initialize (no display environment).
+            SystemExit: If customtkinter cannot initialize (no display environment).
         """
         self._wrapper_core = wrapper_core
         self._config = config
@@ -81,40 +101,71 @@ class GuiInterface:
         self._notification_state = NotificationState()
 
         try:
-            self._root = tk.Tk()
+            customtkinter.set_appearance_mode("dark")
+            customtkinter.set_default_color_theme("blue")
+            self._root = customtkinter.CTk()
             self._root.title("Palworld Server Wrapper")
             self._root.minsize(800, 600)
             self._root.protocol("WM_DELETE_WINDOW", self._on_close_request)
-        except tk.TclError as e:
+        except Exception as e:
             logger.error("Failed to initialize GUI: %s", e)
             sys.exit(1)
 
         self._build_ui()
 
+    # Width threshold (pixels) at which Output Log and Settings switch to side-by-side
+    RESPONSIVE_BREAKPOINT: int = 1200
+    # Hysteresis band to prevent flickering near the breakpoint
+    _HYSTERESIS: int = 50
+
     def _build_ui(self) -> None:
-        """Construct the complete GUI layout.
+        """Construct the complete GUI layout using grid geometry manager.
 
-        Instantiates and arranges all GUI components in a vertical layout using
-        pack(). Components are grouped with labeled frames (ttk.LabelFrame) for
-        visual separation per Requirement 2.2.
+        Instantiates and arranges all GUI components with Card_Frame containers
+        for visual grouping. Supports a responsive layout:
 
-        Layout order (top to bottom):
-        1. ControlPanel - Server control buttons (Start/Stop/Restart)
-        2. StatusDisplay - Real-time server status fields
-        3. OutputPanel - Operational log output
-        4. SettingsPanel - Unified settings display and modification
-        5. Button frame - Help and Quit buttons
-        6. NotificationBar - Success/error notification display (bottom)
+        Narrow (< RESPONSIVE_BREAKPOINT):
+        - Row 0: Server Card (full width) — Status | Controls | Help/Quit
+        - Row 1: Content frame containing Output Log stacked above Settings
+        - Row 2: NotificationBar
 
-        Note: NotificationBar is instantiated before SettingsPanel (since the
-        panel uses it for notifications) but packed at the bottom of the layout.
+        Wide (>= RESPONSIVE_BREAKPOINT):
+        - Row 0: Server Card (full width) — Status | Controls | Help/Quit
+        - Row 1: Content frame containing Output Log (left) + Settings (right) side-by-side
+        - Row 2: NotificationBar
 
         All widget instances are stored as self._ attributes so
         _disable_all_controls() and other methods can access them.
         """
-        # 1. Control Panel - Server lifecycle buttons
+        # Track current layout mode to avoid redundant re-gridding
+        self._is_wide_layout = False
+        self._resize_after_id: str | None = None
+
+        # Configure root grid weights
+        self._root.columnconfigure(0, weight=1)
+        self._root.rowconfigure(0, weight=0)  # Server card
+        self._root.rowconfigure(1, weight=1)  # Content frame (Output + Settings)
+        self._root.rowconfigure(2, weight=0)  # NotificationBar
+
+        # Row 0: Unified Server Card — Status | Controls | Help/Quit
+        server_card = create_card_frame(self._root)
+        server_card.grid(row=0, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=(CARD_OUTER_MARGIN, CARD_OUTER_MARGIN // 2))
+        customtkinter.CTkLabel(
+            server_card, text="Server", font=FONT_HEADING, text_color=COLOR_TEXT, anchor="w"
+        ).grid(row=0, column=0, columnspan=3, sticky="ew", padx=CARD_INNER_PADDING, pady=(CARD_INNER_PADDING, 0))
+
+        # Row 1 of server_card: Status + Controls + Help/Quit in a single horizontal row
+        server_card.columnconfigure(0, weight=1)  # Status expands
+        server_card.columnconfigure(1, weight=0)  # Controls fixed
+        server_card.columnconfigure(2, weight=0)  # Help/Quit fixed
+        self._status_display = StatusDisplay(
+            server_card,
+            idle_timeout_threshold=self._config.idle_timeout_seconds,
+        )
+        self._status_display.grid(row=1, column=0, sticky="nsw", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
+
         self._control_panel = ControlPanel(
-            self._root,
+            server_card,
             on_start=lambda: asyncio.create_task(
                 self._execute_server_operation("start")
             ),
@@ -125,52 +176,202 @@ class GuiInterface:
                 self._execute_server_operation("restart")
             ),
         )
-        self._control_panel.pack(fill="x", padx=10, pady=(10, 5))
+        self._control_panel.grid(row=1, column=1, sticky="nse", padx=WIDGET_INNER_SPACING, pady=CARD_INNER_PADDING)
 
-        # 2. Status Display - Real-time status fields
-        self._status_display = StatusDisplay(
-            self._root,
-            idle_timeout_threshold=self._config.idle_timeout_seconds,
+        # Help/Quit button group in column 2 of the server card
+        utility_frame = customtkinter.CTkFrame(server_card, fg_color="transparent")
+        utility_frame.grid(row=1, column=2, sticky="nse", padx=(WIDGET_INNER_SPACING, CARD_INNER_PADDING), pady=CARD_INNER_PADDING)
+
+        self._help_button = customtkinter.CTkButton(
+            utility_frame,
+            text="Help",
+            fg_color=COLOR_PRIMARY,
+            corner_radius=BUTTON_CORNER_RADIUS,
+            width=120,
+            command=lambda: HelpDialog(self._root),
         )
-        self._status_display.pack(fill="x", padx=10, pady=5)
+        self._help_button.grid(row=0, column=0, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING)
 
-        # 3. Output Panel - Operational log output
-        self._output_panel = OutputPanel(self._root)
-        self._output_panel.pack(fill="both", expand=True, padx=10, pady=5)
+        self._quit_button = customtkinter.CTkButton(
+            utility_frame,
+            text="Quit",
+            fg_color=COLOR_PRIMARY,
+            corner_radius=BUTTON_CORNER_RADIUS,
+            width=120,
+            command=self._on_close_request,
+        )
+        self._quit_button.grid(row=0, column=1, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING)
 
-        # NotificationBar created early (SettingsPanel needs it), packed at the bottom later
-        self._notification_bar = NotificationBar(self._root)
+        # Row 1: Content frame — holds Output Log and Settings panels
+        # Column/row weights are pre-configured for both layout modes so that
+        # _apply_layout() only needs to update grid positions (no weight changes
+        # required during transitions, avoiding geometry invalidation).
+        self._content_frame = customtkinter.CTkFrame(self._root, fg_color="transparent")
+        self._content_frame.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
+        # Pre-configure grid weights — both columns and rows are set up once.
+        # _apply_layout() adjusts weights in-place via columnconfigure/rowconfigure
+        # without calling grid_forget() on child widgets.
+        self._content_frame.columnconfigure(0, weight=1)
+        self._content_frame.columnconfigure(1, weight=0)
+        self._content_frame.rowconfigure(0, weight=1)
+        self._content_frame.rowconfigure(1, weight=0)
 
-        # 4. SettingsPanel - Unified settings display and modification
+        # Output Panel card
+        self._op_card = create_card_frame(self._content_frame)
+        self._op_card.columnconfigure(0, weight=1)
+        self._op_card.rowconfigure(1, weight=1)
+        customtkinter.CTkLabel(
+            self._op_card, text="Output Log", font=FONT_HEADING, text_color=COLOR_TEXT, anchor="w"
+        ).grid(row=0, column=0, sticky="ew", padx=CARD_INNER_PADDING, pady=(CARD_INNER_PADDING, 0))
+        self._output_panel = OutputPanel(self._op_card)
+        self._output_panel.grid(row=1, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
+
+        # NotificationBar created early (SettingsPanel needs it), placed at row 2
+        nb_card = create_card_frame(self._root)
+        nb_card.grid(row=2, column=0, sticky="nsew", padx=CARD_OUTER_MARGIN, pady=(CARD_OUTER_MARGIN // 2, CARD_OUTER_MARGIN))
+        nb_card.columnconfigure(0, weight=1)
+        self._notification_bar = NotificationBar(nb_card)
+        self._notification_bar.grid(row=0, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
+
+        # Settings Panel card
+        self._sp_card = create_card_frame(self._content_frame)
+        self._sp_card.columnconfigure(0, weight=1)
+        self._sp_card.rowconfigure(1, weight=1)
+        customtkinter.CTkLabel(
+            self._sp_card, text="Server Settings", font=FONT_HEADING, text_color=COLOR_TEXT, anchor="w"
+        ).grid(row=0, column=0, sticky="ew", padx=CARD_INNER_PADDING, pady=(CARD_INNER_PADDING, 0))
         self._settings_panel = SettingsPanel(
-            parent=self._root,
+            parent=self._sp_card,
             config=self._config,
             wrapper_core=self._wrapper_core,
             settings_write_handler=self._settings_write_handler,
             notification_bar=self._notification_bar,
         )
-        self._settings_panel.pack(fill="both", expand=True, padx=10, pady=5)
+        self._settings_panel.grid(row=1, column=0, sticky="nsew", padx=CARD_INNER_PADDING, pady=CARD_INNER_PADDING)
 
-        # 5. Button frame - Help and Quit buttons
-        button_frame = ttk.Frame(self._root)
-        button_frame.pack(fill="x", padx=10, pady=5)
+        # Apply initial layout (narrow) and bind resize handler
+        self._apply_layout(wide=False)
+        self._root.bind("<Configure>", self._on_resize)
 
-        self._help_button = ttk.Button(
-            button_frame,
-            text="Help",
-            command=lambda: HelpDialog(self._root),
-        )
-        self._help_button.pack(side="left")
+    def _on_resize(self, event: tk.Event) -> None:
+        """Handle window resize events with debouncing.
 
-        self._quit_button = ttk.Button(
-            button_frame,
-            text="Quit",
-            command=self._on_close_request,
-        )
-        self._quit_button.pack(side="right")
+        Cancels any pending layout update and schedules a new one after 150ms
+        to avoid layout thrashing during continuous resize drags.
+        Only reacts to Configure events on the root window itself.
+        Ignores events triggered by minimize/maximize state transitions to
+        prevent expensive layout recalculation during window state changes.
+        """
+        # Only respond to root window resize, not child widget events
+        if event.widget is not self._root:
+            return
 
-        # 6. NotificationBar is already instantiated above; its pack() is
-        # handled by its own show_success/show_error methods (starts hidden)
+        # Skip layout recalculation during minimize/maximize/restore transitions.
+        # wm_state() returns "iconic" (minimized), "zoomed" (maximized on Windows),
+        # or "normal". We only recalculate layout in "normal" state to avoid
+        # expensive geometry passes on state transitions.
+        try:
+            state = self._root.wm_state()
+        except tk.TclError:
+            return  # Window destroyed
+        if state in ("iconic", "withdrawn"):
+            return
+
+        if self._resize_after_id is not None:
+            self._root.after_cancel(self._resize_after_id)
+        self._resize_after_id = self._root.after(150, self._check_layout)
+
+    def _check_layout(self) -> None:
+        """Check window width and switch layout if breakpoint is crossed.
+
+        Uses hysteresis to prevent flickering: switches to wide at
+        RESPONSIVE_BREAKPOINT and back to narrow at RESPONSIVE_BREAKPOINT - _HYSTERESIS.
+        Skips recalculation if the window is minimized or destroyed.
+        """
+        self._resize_after_id = None
+        try:
+            state = self._root.wm_state()
+            if state in ("iconic", "withdrawn"):
+                return
+            width = self._root.winfo_width()
+        except tk.TclError:
+            return  # Window destroyed
+
+        if not self._is_wide_layout and width >= self.RESPONSIVE_BREAKPOINT:
+            self._apply_layout(wide=True)
+        elif self._is_wide_layout and width < (self.RESPONSIVE_BREAKPOINT - self._HYSTERESIS):
+            self._apply_layout(wide=False)
+
+    def _apply_layout(self, wide: bool) -> None:
+        """Re-grid the Output Log and Settings panels based on layout mode.
+
+        Uses non-destructive grid_configure() to update row/column/span
+        parameters in-place rather than grid_forget()/grid(). This avoids
+        invalidating descendant widget geometry (especially the settings card
+        which contains ~1,500+ child widgets), keeping transitions under 50ms.
+
+        On the first call (widgets not yet gridded), uses grid() to place them.
+        Subsequent calls use grid_configure() to update position in-place.
+
+        Args:
+            wide: If True, place panels side-by-side (Output left, Settings right).
+                  If False, stack panels vertically (Output above Settings).
+        """
+        # Update content frame column/row weights for the target layout mode.
+        # This is lightweight — it only affects how excess space is distributed,
+        # not the geometry of already-placed widgets.
+        if wide:
+            # Side-by-side: both columns share space equally, single row
+            self._content_frame.columnconfigure(1, weight=1)
+            self._content_frame.rowconfigure(1, weight=0)
+        else:
+            # Stacked: single column, both rows share space equally
+            self._content_frame.columnconfigure(1, weight=0)
+            self._content_frame.rowconfigure(1, weight=1)
+
+        # Determine if widgets are already gridded (first call vs subsequent)
+        op_info = self._op_card.grid_info()
+        sp_info = self._sp_card.grid_info()
+
+        if wide:
+            # Side-by-side: Output Log (row 0, col 0), Settings (row 0, col 1)
+            op_kwargs = dict(
+                row=0, column=0, sticky="nsew",
+                padx=(CARD_OUTER_MARGIN, CARD_OUTER_MARGIN // 2),
+                pady=CARD_OUTER_MARGIN // 2,
+            )
+            sp_kwargs = dict(
+                row=0, column=1, sticky="nsew",
+                padx=(CARD_OUTER_MARGIN // 2, CARD_OUTER_MARGIN),
+                pady=CARD_OUTER_MARGIN // 2,
+            )
+        else:
+            # Stacked: Output Log (row 0, col 0), Settings (row 1, col 0)
+            op_kwargs = dict(
+                row=0, column=0, sticky="nsew",
+                padx=CARD_OUTER_MARGIN,
+                pady=CARD_OUTER_MARGIN // 2,
+            )
+            sp_kwargs = dict(
+                row=1, column=0, sticky="nsew",
+                padx=CARD_OUTER_MARGIN,
+                pady=CARD_OUTER_MARGIN // 2,
+            )
+
+        # Use grid_configure() if already gridded, grid() for first placement.
+        # grid_configure() updates position in-place without removing the widget
+        # from the grid, avoiding geometry invalidation of the entire subtree.
+        if op_info:
+            self._op_card.grid_configure(**op_kwargs)
+        else:
+            self._op_card.grid(**op_kwargs)
+
+        if sp_info:
+            self._sp_card.grid_configure(**sp_kwargs)
+        else:
+            self._sp_card.grid(**sp_kwargs)
+
+        self._is_wide_layout = wide
 
     def _schedule_status_refresh(self) -> None:
         """Schedule periodic status display updates (every 1 second).
@@ -197,30 +398,36 @@ class GuiInterface:
 
         Calls WrapperCore.get_status() and updates the StatusDisplay and
         ControlPanel widgets if they exist. Reschedules itself every 1 second
-        unless a shutdown is in progress.
+        unless a shutdown is in progress. Skips widget updates when the window
+        is minimized to avoid unnecessary rendering overhead.
         """
         if self._gui_state.shutdown_in_progress:
             return
 
         try:
-            status = self._wrapper_core.get_status()
+            # Skip widget updates when minimized — no visual output is visible
+            state = self._root.wm_state()
+            if state not in ("iconic", "withdrawn"):
+                status = self._wrapper_core.get_status()
 
-            # Update StatusDisplay if it exists
-            if hasattr(self, "_status_display") and self._status_display is not None:
-                self._status_display.update_status(status)
+                # Update StatusDisplay if it exists
+                if hasattr(self, "_status_display") and self._status_display is not None:
+                    self._status_display.update_status(status)
 
-            # Update ControlPanel button states if it exists and no operation in progress
-            if (
-                hasattr(self, "_control_panel")
-                and self._control_panel is not None
-                and not self._gui_state.operation_in_progress
-            ):
-                self._control_panel.update_button_states(status.server_state)
+                # Update ControlPanel button states if it exists and no operation in progress
+                if (
+                    hasattr(self, "_control_panel")
+                    and self._control_panel is not None
+                    and not self._gui_state.operation_in_progress
+                ):
+                    self._control_panel.update_button_states(status.server_state)
 
-            # Update pending indicator in settings panel
-            if hasattr(self, "_settings_panel") and self._settings_panel is not None:
-                self._settings_panel.update_pending_indicator()
+                # Update pending indicator in settings panel
+                if hasattr(self, "_settings_panel") and self._settings_panel is not None:
+                    self._settings_panel.update_pending_indicator()
 
+        except tk.TclError:
+            return  # Window destroyed
         except Exception as e:
             logger.error("Error refreshing status: %s", e)
 
@@ -236,6 +443,10 @@ class GuiInterface:
         background tasks (REST API polling, idle timer, maintenance timer, connection
         listener) to continue executing on schedule.
 
+        When the window is minimized, the update interval is reduced to ~200ms
+        to avoid unnecessary CPU usage and prevent buildup of geometry events
+        that would all fire at once upon restore.
+
         The loop continues until self._running is set to False (via _shutdown())
         or the window is destroyed externally.
         """
@@ -249,7 +460,15 @@ class GuiInterface:
                 # Window has been destroyed (e.g., user closed it or shutdown completed)
                 break
 
-            await asyncio.sleep(0.033)
+            # Throttle when minimized — no visible updates needed
+            try:
+                state = self._root.wm_state()
+            except tk.TclError:
+                break
+            if state in ("iconic", "withdrawn"):
+                await asyncio.sleep(0.2)
+            else:
+                await asyncio.sleep(0.033)
 
     def _on_close_request(self) -> None:
         """Handle the WM_DELETE_WINDOW event (user clicks window close button).
@@ -389,13 +608,11 @@ class GuiInterface:
         """Disable all interactive controls during shutdown.
 
         Iterates through known widget attributes and disables them.
-        Uses hasattr() checks since widgets may not exist yet (e.g., if
-        _build_ui() hasn't been fully wired in task 8.1).
+        Uses hasattr() checks since widgets may not exist yet.
 
         Disables:
         - ControlPanel buttons (Start, Stop, Restart)
-        - SettingsEditor Apply button
-        - SettingsView Refresh button
+        - SettingsPanel Refresh button
         - Quit button
         - Help button
         """
@@ -429,12 +646,12 @@ class GuiInterface:
                 pass
 
 
-class ControlPanel(ttk.LabelFrame):
+class ControlPanel(customtkinter.CTkFrame):
     """Server control buttons with state-aware enable/disable logic.
 
     Provides "Start Server", "Stop Server", and "Restart Server" buttons
-    arranged in a horizontal row. Button states update automatically based
-    on the current ServerState:
+    arranged in a single horizontal row using grid layout. Button states update
+    automatically based on the current ServerState:
 
     - MONITORING: Start=enabled, Restart=enabled, Stop=disabled
     - RUNNING: Start=disabled, Stop=enabled, Restart=enabled
@@ -451,40 +668,67 @@ class ControlPanel(ttk.LabelFrame):
         """Initialize the ControlPanel.
 
         Args:
-            parent: The parent tkinter widget.
+            parent: The parent widget.
             on_start: Callback invoked when the "Start Server" button is clicked.
             on_stop: Callback invoked when the "Stop Server" button is clicked.
             on_restart: Callback invoked when the "Restart Server" button is clicked.
         """
-        super().__init__(parent, text="Server Control")
+        super().__init__(parent, fg_color="transparent")
 
         self._on_start = on_start
         self._on_stop = on_stop
         self._on_restart = on_restart
 
-        # Button container frame for horizontal layout
-        button_frame = ttk.Frame(self)
-        button_frame.pack(fill="x", padx=5, pady=5)
+        # Horizontal row layout — columns 0, 1, 2 for buttons
+        self.columnconfigure(0, weight=0)
+        self.columnconfigure(1, weight=0)
+        self.columnconfigure(2, weight=0)
 
-        # Create server control buttons
-        self._start_button = ttk.Button(
-            button_frame, text="Start Server", command=self._on_start
+        # Create server control buttons in a single row
+        self._start_button = customtkinter.CTkButton(
+            self,
+            text="Start Server",
+            command=self._on_start,
+            fg_color=COLOR_PRIMARY,
+            corner_radius=BUTTON_CORNER_RADIUS,
+            width=120,
         )
-        self._start_button.pack(side="left", padx=(0, 5))
-
-        self._stop_button = ttk.Button(
-            button_frame, text="Stop Server", command=self._on_stop
+        self._start_button.grid(
+            row=0, column=0, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING, sticky="ew"
         )
-        self._stop_button.pack(side="left", padx=(0, 5))
 
-        self._restart_button = ttk.Button(
-            button_frame, text="Restart Server", command=self._on_restart
+        self._stop_button = customtkinter.CTkButton(
+            self,
+            text="Stop Server",
+            command=self._on_stop,
+            fg_color=COLOR_PRIMARY,
+            corner_radius=BUTTON_CORNER_RADIUS,
+            width=120,
         )
-        self._restart_button.pack(side="left", padx=(0, 5))
+        self._stop_button.grid(
+            row=0, column=1, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING, sticky="ew"
+        )
 
-        # Loading indicator label (hidden by default)
-        self._loading_label = ttk.Label(self, text="Operation in progress...")
-        # Do not pack yet — shown only when set_loading(True) is called
+        self._restart_button = customtkinter.CTkButton(
+            self,
+            text="Restart Server",
+            command=self._on_restart,
+            fg_color=COLOR_PRIMARY,
+            corner_radius=BUTTON_CORNER_RADIUS,
+            width=120,
+        )
+        self._restart_button.grid(
+            row=0, column=2, padx=WIDGET_INNER_SPACING, pady=WIDGET_INNER_SPACING, sticky="ew"
+        )
+
+        # Loading indicator label in row 1 spanning all columns (hidden by default)
+        self._loading_label = customtkinter.CTkLabel(
+            self,
+            text="Operation in progress...",
+            text_color=COLOR_TEXT_SECONDARY,
+            font=FONT_BODY,
+        )
+        # Do not grid yet — shown only when set_loading(True) is called
 
         # Initialize with MONITORING state (default)
         self.update_button_states(ServerState.MONITORING)
@@ -501,19 +745,19 @@ class ControlPanel(ttk.LabelFrame):
             STARTING/STOPPING: All disabled, loading indicator shown
         """
         if state == ServerState.MONITORING:
-            self._start_button.configure(state="normal")
-            self._stop_button.configure(state="disabled")
-            self._restart_button.configure(state="normal")
+            self._start_button.configure(state="normal", fg_color=COLOR_PRIMARY)
+            self._stop_button.configure(state="disabled", fg_color=COLOR_DISABLED)
+            self._restart_button.configure(state="normal", fg_color=COLOR_PRIMARY)
             self._hide_loading()
         elif state == ServerState.RUNNING:
-            self._start_button.configure(state="disabled")
-            self._stop_button.configure(state="normal")
-            self._restart_button.configure(state="normal")
+            self._start_button.configure(state="disabled", fg_color=COLOR_DISABLED)
+            self._stop_button.configure(state="normal", fg_color=COLOR_PRIMARY)
+            self._restart_button.configure(state="normal", fg_color=COLOR_PRIMARY)
             self._hide_loading()
         elif state in (ServerState.STARTING, ServerState.STOPPING):
-            self._start_button.configure(state="disabled")
-            self._stop_button.configure(state="disabled")
-            self._restart_button.configure(state="disabled")
+            self._start_button.configure(state="disabled", fg_color=COLOR_DISABLED)
+            self._stop_button.configure(state="disabled", fg_color=COLOR_DISABLED)
+            self._restart_button.configure(state="disabled", fg_color=COLOR_DISABLED)
             self._show_loading()
 
     def set_loading(self, loading: bool) -> None:
@@ -525,26 +769,28 @@ class ControlPanel(ttk.LabelFrame):
                     updated separately via update_button_states()).
         """
         if loading:
-            self._start_button.configure(state="disabled")
-            self._stop_button.configure(state="disabled")
-            self._restart_button.configure(state="disabled")
+            self._start_button.configure(state="disabled", fg_color=COLOR_DISABLED)
+            self._stop_button.configure(state="disabled", fg_color=COLOR_DISABLED)
+            self._restart_button.configure(state="disabled", fg_color=COLOR_DISABLED)
             self._show_loading()
         else:
             self._hide_loading()
 
     def _show_loading(self) -> None:
-        """Show the loading indicator label."""
-        self._loading_label.pack(fill="x", padx=5, pady=(0, 5))
+        """Show the loading indicator label below the buttons."""
+        self._loading_label.grid(
+            row=1, column=0, columnspan=3, padx=WIDGET_INNER_SPACING, pady=(0, WIDGET_INNER_SPACING), sticky="ew"
+        )
 
     def _hide_loading(self) -> None:
         """Hide the loading indicator label."""
-        self._loading_label.pack_forget()
+        self._loading_label.grid_remove()
 
 
-class OutputPanel(ttk.LabelFrame):
+class OutputPanel(customtkinter.CTkFrame):
     """Scrollable text area displaying operational log output.
 
-    Provides a read-only text widget that receives log messages via
+    Provides a read-only CTkTextbox widget that receives log messages via
     append_message(). Auto-scrolls to the latest entry. Maintains
     a maximum of 1000 lines to prevent unbounded memory growth.
 
@@ -560,21 +806,22 @@ class OutputPanel(ttk.LabelFrame):
         Args:
             parent: The parent tkinter widget.
         """
-        super().__init__(parent, text="Output")
+        super().__init__(parent, fg_color="transparent")
 
-        # Scrollbar on the right side
-        self._scrollbar = ttk.Scrollbar(self)
-        self._scrollbar.pack(side="right", fill="y")
+        # Grid layout - textbox fills the entire frame
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
 
-        # Read-only Text widget
-        self._text_widget = tk.Text(
+        # CTkTextbox replaces tk.Text + ttk.Scrollbar (CTkTextbox has built-in scrollbar)
+        self._text_widget = customtkinter.CTkTextbox(
             self,
-            wrap="word",
             state="disabled",
-            yscrollcommand=self._scrollbar.set,
+            font=FONT_MONO,
+            fg_color=COLOR_INPUT_BG,
+            text_color=COLOR_TEXT,
+            wrap="word",
         )
-        self._text_widget.pack(side="left", fill="both", expand=True)
-        self._scrollbar.configure(command=self._text_widget.yview)
+        self._text_widget.grid(row=0, column=0, sticky="nsew")
 
     def append_message(self, message: str) -> None:
         """Append a log message to the output panel.
@@ -607,13 +854,13 @@ class OutputPanel(ttk.LabelFrame):
         self._text_widget.configure(state="disabled")
 
 
-class NotificationBar(ttk.Frame):
+class NotificationBar(customtkinter.CTkFrame):
     """Status notification bar at the bottom of the main window.
 
     Success messages auto-dismiss after 5 seconds.
     Error messages persist until user dismisses them.
 
-    The bar is hidden when there is no active notification (uses pack_forget()).
+    The bar is hidden when there is no active notification (uses grid_remove()).
     Tracks the current after() callback ID so it can be cancelled if a new
     notification replaces an old one.
     """
@@ -623,25 +870,35 @@ class NotificationBar(ttk.Frame):
 
         Args:
             parent: The parent tkinter widget (typically the root window or
-                    a container frame).
+                    a container frame). When shown/hidden, the parent card
+                    frame is also toggled to avoid an empty visible container.
         """
-        super().__init__(parent)
+        super().__init__(parent, fg_color="transparent")
 
         self._after_id: str | None = None
         self._is_visible: bool = False
+        self._parent_card = parent
+
+        # Configure grid columns: message expands, dismiss button fixed
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=0)
 
         # Message label - takes up most of the horizontal space
-        self._message_label = ttk.Label(self, text="", anchor="w")
-        self._message_label.pack(side="left", fill="x", expand=True, padx=(5, 0))
-
-        # Dismiss button [x]
-        self._dismiss_button = ttk.Button(
-            self, text="\u00d7", width=3, command=self.dismiss
+        self._message_label = customtkinter.CTkLabel(
+            self, text="", anchor="w", text_color=COLOR_TEXT, font=FONT_BODY
         )
-        self._dismiss_button.pack(side="right", padx=(0, 5))
+        self._message_label.grid(row=0, column=0, sticky="ew")
+
+        # Dismiss button [×]
+        self._dismiss_button = customtkinter.CTkButton(
+            self, text="\u00d7", width=30, fg_color="transparent",
+            command=self.dismiss
+        )
+        self._dismiss_button.grid(row=0, column=1)
 
         # Start hidden since there's no notification to show
-        self.pack_forget()
+        self.grid_remove()
+        self._parent_card.grid_remove()
 
     def show_success(self, message: str) -> None:
         """Display a success notification that auto-dismisses after 5 seconds.
@@ -653,7 +910,7 @@ class NotificationBar(ttk.Frame):
             message: The success message to display.
         """
         self._cancel_pending_dismiss()
-        self._message_label.configure(text=message, foreground="green")
+        self._message_label.configure(text=message, text_color=COLOR_SUCCESS)
         self._show()
 
         # Schedule auto-dismiss after 5 seconds (5000 ms)
@@ -669,7 +926,7 @@ class NotificationBar(ttk.Frame):
             message: The error message to display.
         """
         self._cancel_pending_dismiss()
-        self._message_label.configure(text=message, foreground="red")
+        self._message_label.configure(text=message, text_color=COLOR_ALERT)
         self._show()
 
     def dismiss(self) -> None:
@@ -684,13 +941,15 @@ class NotificationBar(ttk.Frame):
     def _show(self) -> None:
         """Make the notification bar visible."""
         if not self._is_visible:
-            self.pack(side="bottom", fill="x", pady=(5, 0))
+            self._parent_card.grid()
+            self.grid()
             self._is_visible = True
 
     def _hide(self) -> None:
         """Hide the notification bar."""
         if self._is_visible:
-            self.pack_forget()
+            self.grid_remove()
+            self._parent_card.grid_remove()
             self._is_visible = False
 
     def _cancel_pending_dismiss(self) -> None:
@@ -701,16 +960,15 @@ class NotificationBar(ttk.Frame):
 
 
 
-class StatusDisplay(ttk.LabelFrame):
-    """Real-time server status display with conditional field visibility.
+class StatusDisplay(customtkinter.CTkFrame):
+    """Real-time server status display using CTkFrame with grid layout.
 
-    Displays: State (uppercase), Player Count, Idle Timer status,
-    Server PID (only when available), and Uptime (only when available).
+    Displays: State (uppercase), Player Count, Idle Timer status in a single
+    horizontal row. Server PID and Uptime appear in a second row only when the
+    server is running.
 
-    Fields for Server PID and Uptime are completely omitted from the display
-    when their values are None, and shown when values are available.
-    The display is rebuilt on each update_status() call to handle the
-    conditional field presence cleanly.
+    Always-visible fields are created once and updated in-place via configure()
+    to avoid flicker. Conditional fields (PID, Uptime) are shown/hidden as needed.
     """
 
     def __init__(self, parent: tk.Widget, idle_timeout_threshold: int) -> None:
@@ -721,40 +979,97 @@ class StatusDisplay(ttk.LabelFrame):
             idle_timeout_threshold: The configured idle timeout threshold in seconds,
                 used to display the idle timer format "{elapsed}s elapsed ({threshold}s threshold)".
         """
-        super().__init__(parent, text="Server Status")
+        super().__init__(parent, fg_color="transparent")
 
         self._idle_timeout_threshold = idle_timeout_threshold
 
-        # Container frame for the status fields (rebuilt on each update)
-        self._fields_frame = ttk.Frame(self)
-        self._fields_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        # Track whether conditional fields are currently visible
+        self._pid_visible = False
+        self._uptime_visible = False
 
-        # Track current field labels for cleanup on rebuild
-        self._field_widgets: list[ttk.Label] = []
+        # --- Row 0: Always-visible fields in a horizontal row ---
+        # Layout: [State: VALUE] [Players: VALUE] [Idle Timer: VALUE]
+        # Using columns 0-5 (label/value pairs)
+        col = 0
+        self._state_name_label = customtkinter.CTkLabel(
+            self, text="State:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
+        )
+        self._state_name_label.grid(
+            row=0, column=col, sticky="w", padx=(0, WIDGET_INNER_SPACING)
+        )
+        col += 1
+        self._state_value_label = customtkinter.CTkLabel(
+            self, text="MONITORING", font=FONT_BODY, text_color=COLOR_TEXT
+        )
+        self._state_value_label.grid(
+            row=0, column=col, sticky="w", padx=(0, CARD_INNER_PADDING)
+        )
+        col += 1
 
-        # Show initial placeholder state
-        self._build_fields(
-            state="MONITORING",
-            player_count=0,
-            idle_timer_text="Not active",
-            server_pid=None,
-            uptime_seconds=None,
+        self._players_name_label = customtkinter.CTkLabel(
+            self, text="Players:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
+        )
+        self._players_name_label.grid(
+            row=0, column=col, sticky="w", padx=(0, WIDGET_INNER_SPACING)
+        )
+        col += 1
+        self._players_value_label = customtkinter.CTkLabel(
+            self, text="0", font=FONT_BODY, text_color=COLOR_TEXT
+        )
+        self._players_value_label.grid(
+            row=0, column=col, sticky="w", padx=(0, CARD_INNER_PADDING)
+        )
+        col += 1
+
+        self._idle_name_label = customtkinter.CTkLabel(
+            self, text="Idle Timer:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
+        )
+        self._idle_name_label.grid(
+            row=0, column=col, sticky="w", padx=(0, WIDGET_INNER_SPACING)
+        )
+        col += 1
+        self._idle_value_label = customtkinter.CTkLabel(
+            self, text="Not active", font=FONT_BODY, text_color=COLOR_TEXT
+        )
+        self._idle_value_label.grid(
+            row=0, column=col, sticky="w"
+        )
+
+        # --- Row 1: Conditional fields (PID + Uptime) in a second horizontal row ---
+        self._pid_name_label = customtkinter.CTkLabel(
+            self, text="PID:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
+        )
+        self._pid_value_label = customtkinter.CTkLabel(
+            self, text="", font=FONT_BODY, text_color=COLOR_TEXT
+        )
+        self._uptime_name_label = customtkinter.CTkLabel(
+            self, text="Uptime:", font=FONT_SUBHEADING, text_color=COLOR_TEXT
+        )
+        self._uptime_value_label = customtkinter.CTkLabel(
+            self, text="", font=FONT_BODY, text_color=COLOR_TEXT
         )
 
     def update_status(self, status: WrapperStatus) -> None:
         """Update all status fields from a WrapperStatus snapshot.
 
-        Rebuilds the field display to handle conditional PID/uptime visibility.
-        Shows state in uppercase, formats idle timer based on active status,
-        and omits PID/uptime fields when their values are None.
+        Updates always-visible labels in-place via configure() to avoid flicker.
+        Shows or hides conditional PID/Uptime fields only when their visibility
+        state changes.
 
         Args:
             status: The current WrapperStatus snapshot from WrapperCore.
         """
-        # Format state as uppercase
-        state_text = status.server_state.name.upper()
+        # --- Update always-visible fields in-place ---
 
-        # Format idle timer
+        # State
+        state_text = status.server_state.name.upper()
+        state_value_color = COLOR_ACCENT if state_text == "RUNNING" else COLOR_TEXT
+        self._state_value_label.configure(text=state_text, text_color=state_value_color)
+
+        # Players
+        self._players_value_label.configure(text=str(status.player_count))
+
+        # Idle Timer
         if status.idle_timer_active:
             idle_timer_text = (
                 f"{status.idle_seconds}s elapsed "
@@ -762,87 +1077,49 @@ class StatusDisplay(ttk.LabelFrame):
             )
         else:
             idle_timer_text = "Not active"
+        self._idle_value_label.configure(text=idle_timer_text)
 
-        # Rebuild the display with current values
-        self._build_fields(
-            state=state_text,
-            player_count=status.player_count,
-            idle_timer_text=idle_timer_text,
-            server_pid=status.server_pid,
-            uptime_seconds=status.uptime_seconds,
-        )
+        # --- Update conditional fields (show/hide only on visibility change) ---
 
-    def _build_fields(
-        self,
-        state: str,
-        player_count: int,
-        idle_timer_text: str,
-        server_pid: int | None,
-        uptime_seconds: int | None,
-    ) -> None:
-        """Rebuild the status field display.
+        # Server PID
+        pid_should_show = status.server_pid is not None
+        if pid_should_show != self._pid_visible:
+            if pid_should_show:
+                self._pid_name_label.grid(
+                    row=1, column=0, sticky="w", pady=(WIDGET_INNER_SPACING, 0), padx=(0, WIDGET_INNER_SPACING)
+                )
+                self._pid_value_label.grid(
+                    row=1, column=1, sticky="w", pady=(WIDGET_INNER_SPACING, 0), padx=(0, CARD_INNER_PADDING)
+                )
+            else:
+                self._pid_name_label.grid_remove()
+                self._pid_value_label.grid_remove()
+            self._pid_visible = pid_should_show
 
-        Destroys existing field widgets and creates new ones based on current
-        values. Conditional fields (PID, Uptime) are only created when their
-        values are not None.
+        if pid_should_show:
+            self._pid_value_label.configure(text=str(status.server_pid))
 
-        Args:
-            state: The server state text (uppercase).
-            player_count: Current connected player count.
-            idle_timer_text: Formatted idle timer display string.
-            server_pid: Server process PID, or None to omit the field.
-            uptime_seconds: Server uptime in seconds, or None to omit the field.
-        """
-        # Destroy existing field widgets
-        for widget in self._field_widgets:
-            widget.destroy()
-        self._field_widgets.clear()
+        # Uptime
+        uptime_should_show = status.uptime_seconds is not None
+        if uptime_should_show != self._uptime_visible:
+            if uptime_should_show:
+                self._uptime_name_label.grid(
+                    row=1, column=2, sticky="w", pady=(WIDGET_INNER_SPACING, 0), padx=(0, WIDGET_INNER_SPACING)
+                )
+                self._uptime_value_label.grid(
+                    row=1, column=3, sticky="w", pady=(WIDGET_INNER_SPACING, 0), padx=(0, CARD_INNER_PADDING)
+                )
+            else:
+                self._uptime_name_label.grid_remove()
+                self._uptime_value_label.grid_remove()
+            self._uptime_visible = uptime_should_show
 
-        row = 0
-
-        # State field (always shown)
-        state_label = ttk.Label(self._fields_frame, text=f"State:        {state}")
-        state_label.grid(row=row, column=0, sticky="w", pady=(0, 2))
-        self._field_widgets.append(state_label)
-        row += 1
-
-        # Player Count field (always shown)
-        players_label = ttk.Label(
-            self._fields_frame, text=f"Players:      {player_count}"
-        )
-        players_label.grid(row=row, column=0, sticky="w", pady=(0, 2))
-        self._field_widgets.append(players_label)
-        row += 1
-
-        # Idle Timer field (always shown, text varies)
-        idle_label = ttk.Label(
-            self._fields_frame, text=f"Idle Timer:   {idle_timer_text}"
-        )
-        idle_label.grid(row=row, column=0, sticky="w", pady=(0, 2))
-        self._field_widgets.append(idle_label)
-        row += 1
-
-        # Server PID field (conditional - only shown when not None)
-        if server_pid is not None:
-            pid_label = ttk.Label(
-                self._fields_frame, text=f"Server PID:   {server_pid}"
-            )
-            pid_label.grid(row=row, column=0, sticky="w", pady=(0, 2))
-            self._field_widgets.append(pid_label)
-            row += 1
-
-        # Uptime field (conditional - only shown when not None)
-        if uptime_seconds is not None:
-            uptime_label = ttk.Label(
-                self._fields_frame, text=f"Uptime:       {uptime_seconds}s"
-            )
-            uptime_label.grid(row=row, column=0, sticky="w", pady=(0, 2))
-            self._field_widgets.append(uptime_label)
-            row += 1
+        if uptime_should_show:
+            self._uptime_value_label.configure(text=f"{status.uptime_seconds}s")
 
 
 
-class HelpDialog(tk.Toplevel):
+class HelpDialog(customtkinter.CTkToplevel):
     """Modal help dialog with feature documentation.
 
     Displays a scrollable read-only text area containing descriptions of all
@@ -928,7 +1205,7 @@ to ensure the application does not hang indefinitely.
     def __init__(self, parent: tk.Widget) -> None:
         """Initialize the HelpDialog.
 
-        Creates a Toplevel window with scrollable help text content and a
+        Creates a CTkToplevel window with scrollable help text content and a
         Close button. The dialog is set as transient to the parent and
         grabs focus via grab_set().
 
@@ -937,6 +1214,7 @@ to ensure the application does not hang indefinitely.
         """
         super().__init__(parent)
 
+        self.configure(fg_color=COLOR_BASE_BG)
         self.title("Help - Palworld Server Wrapper")
         self.geometry("600x400")
         self.resizable(True, True)
@@ -953,30 +1231,28 @@ to ensure the application does not hang indefinitely.
     def _build_content(self) -> None:
         """Build the scrollable help text content and Close button.
 
-        Creates a read-only Text widget with a vertical scrollbar for the
-        help content, and a Close button at the bottom to dismiss the dialog.
+        Creates a CTkTextbox with built-in scrollbar for the help content,
+        and a Close button at the bottom to dismiss the dialog.
 
         If help content cannot be loaded (resource failure), displays an
         error message instead.
         """
-        # Content frame for the text widget and scrollbar
-        content_frame = ttk.Frame(self)
-        content_frame.pack(fill="both", expand=True, padx=10, pady=(10, 5))
+        # Configure grid layout for the toplevel
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        self.rowconfigure(1, weight=0)
 
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(content_frame)
-        scrollbar.pack(side="right", fill="y")
-
-        # Read-only text widget for help content
-        self._text_widget = tk.Text(
-            content_frame,
+        # CTkTextbox with built-in scrollbar for help content
+        self._text_widget = customtkinter.CTkTextbox(
+            self,
             wrap="word",
-            yscrollcommand=scrollbar.set,
-            padx=10,
-            pady=10,
+            font=FONT_BODY,
+            text_color=COLOR_TEXT,
+            fg_color=COLOR_INPUT_BG,
         )
-        self._text_widget.pack(side="left", fill="both", expand=True)
-        scrollbar.configure(command=self._text_widget.yview)
+        self._text_widget.grid(
+            row=0, column=0, sticky="nsew", padx=10, pady=(10, 5)
+        )
 
         # Insert help content
         try:
@@ -990,404 +1266,11 @@ to ensure the application does not hang indefinitely.
         self._text_widget.configure(state="disabled")
 
         # Close button at the bottom
-        button_frame = ttk.Frame(self)
-        button_frame.pack(fill="x", padx=10, pady=(5, 10))
-
-        close_button = ttk.Button(
-            button_frame, text="Close", command=self.destroy
+        close_button = customtkinter.CTkButton(
+            self,
+            text="Close",
+            command=self.destroy,
+            fg_color=COLOR_PRIMARY,
+            corner_radius=BUTTON_CORNER_RADIUS,
         )
-        close_button.pack(side="right")
-
-
-class SettingsView(ttk.LabelFrame):
-    """Read-only display of all server settings with password masking.
-
-    Displays settings from PalWorldSettings.ini sorted alphabetically by key
-    in "Key = Value" format. Password-containing keys have their values masked
-    with "********". Provides a Refresh button to re-read the settings file.
-
-    Handles error conditions:
-    - If SettingsParser returns a dict with "__error__" key, displays only
-      the error message (no setting rows).
-    - If SettingsParser returns an empty dict, displays an informational
-      message indicating no settings were found.
-    """
-
-    def __init__(self, parent: tk.Widget, config: WrapperConfig) -> None:
-        """Initialize the SettingsView.
-
-        Args:
-            parent: The parent tkinter widget.
-            config: The wrapper configuration (provides settings_file_path).
-        """
-        super().__init__(parent, text="Server Settings")
-
-        self._config = config
-
-        # Content frame holds the text widget and scrollbar
-        content_frame = ttk.Frame(self)
-        content_frame.pack(fill="both", expand=True, padx=5, pady=5)
-
-        # Scrollbar for the text widget
-        scrollbar = ttk.Scrollbar(content_frame)
-        scrollbar.pack(side="right", fill="y")
-
-        # Read-only text widget for displaying settings
-        self._text_widget = tk.Text(
-            content_frame,
-            wrap="none",
-            state="disabled",
-            yscrollcommand=scrollbar.set,
-            height=10,
-        )
-        self._text_widget.pack(side="left", fill="both", expand=True)
-        scrollbar.configure(command=self._text_widget.yview)
-
-        # Refresh button at the bottom
-        self._refresh_button = ttk.Button(
-            self, text="Refresh", command=self.refresh
-        )
-        self._refresh_button.pack(anchor="e", padx=5, pady=(0, 5))
-
-        # Populate initial data
-        self.refresh()
-
-    def refresh(self) -> None:
-        """Re-read settings from file and update the display.
-
-        Uses SettingsParser.read_settings() with the configured settings file
-        path. Handles error and empty-dict cases appropriately.
-        """
-        settings = SettingsParser.read_settings(self._config.settings_file_path)
-        self._display_settings(settings)
-
-    def _display_settings(self, settings: dict) -> None:
-        """Render settings in the text widget.
-
-        Args:
-            settings: Dictionary of settings from SettingsParser.read_settings().
-                      May contain "__error__" key for error conditions, or be
-                      empty for the no-settings-found case.
-        """
-        self._text_widget.configure(state="normal")
-        self._text_widget.delete("1.0", "end")
-
-        if "__error__" in settings:
-            # Display only the error message, no setting rows
-            self._text_widget.insert("1.0", settings["__error__"])
-        elif not settings:
-            # Empty dict: no settings found
-            self._text_widget.insert(
-                "1.0", "No settings found in configuration file."
-            )
-        else:
-            # Sort alphabetically by key and display
-            lines = []
-            for key in sorted(settings.keys()):
-                if is_password_setting(key):
-                    lines.append(f"{key} = {PASSWORD_MASK}")
-                else:
-                    lines.append(f"{key} = {settings[key]}")
-            self._text_widget.insert("1.0", "\n".join(lines))
-
-        self._text_widget.configure(state="disabled")
-
-
-
-
-class SettingsEditor(ttk.LabelFrame):
-    """Setting modification with type validation and auto-correction feedback.
-
-    Provides input fields for specifying a setting key and value, validates
-    using the shared validation logic from src/validation.py, displays
-    auto-correction feedback when applicable, and writes the setting to
-    PalWorldSettings.ini via SettingsParser.
-
-    Unknown keys (not in SETTING_DEFINITIONS) are written as raw strings
-    without type validation per Requirement 6.9.
-
-    On success: shows confirmation, triggers on_setting_changed callback
-    (to refresh SettingsView), and warns if server is RUNNING.
-    """
-
-    MAX_KEY_LENGTH = 128
-    MAX_VALUE_LENGTH = 1024
-
-    def __init__(
-        self,
-        parent: tk.Widget,
-        config: WrapperConfig,
-        wrapper_core: WrapperCore,
-        on_setting_changed: Callable[[], None],
-        settings_write_handler: "SettingsWriteHandler | None" = None,
-    ) -> None:
-        """Initialize the SettingsEditor.
-
-        Args:
-            parent: The parent tkinter widget.
-            config: The wrapper configuration (provides settings_file_path).
-            wrapper_core: The WrapperCore instance (for checking server state).
-            on_setting_changed: Callback invoked (no arguments) after a setting
-                is successfully written, used to refresh SettingsView.
-            settings_write_handler: Optional SettingsWriteHandler for routing writes.
-        """
-        super().__init__(parent, text="Modify Setting")
-
-        self._config = config
-        self._wrapper_core = wrapper_core
-        self._on_setting_changed = on_setting_changed
-        self._settings_write_handler = settings_write_handler
-
-        # Input fields frame
-        input_frame = ttk.Frame(self)
-        input_frame.pack(fill="x", padx=5, pady=5)
-
-        # Key input field
-        ttk.Label(input_frame, text="Key:").pack(side="left", padx=(0, 5))
-        self._key_var = tk.StringVar()
-        self._key_var.trace_add("write", self._limit_key_length)
-        self._key_entry = ttk.Entry(input_frame, textvariable=self._key_var, width=30)
-        self._key_entry.pack(side="left", padx=(0, 10))
-
-        # Value input field
-        ttk.Label(input_frame, text="Value:").pack(side="left", padx=(0, 5))
-        self._value_var = tk.StringVar()
-        self._value_var.trace_add("write", self._limit_value_length)
-        self._value_entry = ttk.Entry(
-            input_frame, textvariable=self._value_var, width=30
-        )
-        self._value_entry.pack(side="left", padx=(0, 10))
-
-        # Apply button
-        self._apply_button = ttk.Button(
-            input_frame, text="Apply", command=self._on_submit
-        )
-        self._apply_button.pack(side="left")
-
-        # Feedback label (shows messages below the inputs)
-        self._feedback_label = ttk.Label(self, text="", wraplength=700)
-        self._feedback_label.pack(fill="x", padx=5, pady=(0, 5))
-
-        # Pending indicator label (shows pending count when queue is non-empty in unsafe state)
-        self._pending_indicator = ttk.Label(self, text="", foreground="orange")
-        self._pending_indicator.pack(fill="x", padx=5, pady=(0, 5))
-        self._pending_indicator.pack_forget()  # Hidden initially
-
-    def _limit_key_length(self, *args) -> None:
-        """Limit key entry to MAX_KEY_LENGTH characters via StringVar trace."""
-        current = self._key_var.get()
-        if len(current) > self.MAX_KEY_LENGTH:
-            self._key_var.set(current[: self.MAX_KEY_LENGTH])
-
-    def _limit_value_length(self, *args) -> None:
-        """Limit value entry to MAX_VALUE_LENGTH characters via StringVar trace."""
-        current = self._value_var.get()
-        if len(current) > self.MAX_VALUE_LENGTH:
-            self._value_var.set(current[: self.MAX_VALUE_LENGTH])
-
-    def _on_submit(self) -> None:
-        """Handle the Apply button click.
-
-        Routes through SettingsWriteHandler when available (with fallback to
-        original direct-write code if None).
-
-        Workflow with SettingsWriteHandler:
-        1. Get key and value from entry fields
-        2. Validate key is non-empty
-        3. Call validate_and_correct(key, value) for user-facing auto-correction
-        4. If validation error, show in feedback label (red)
-        5. If CorrectionResult, submit via SettingsWriteHandler.submit()
-        6. Display appropriate message based on whether the setting was queued or written directly
-
-        Fallback (no handler): original validation + direct write behavior.
-        """
-        key = self._key_var.get().strip()
-        value = self._value_var.get()
-
-        # Validate key is non-empty
-        if not key:
-            self._show_feedback("Error: Setting key cannot be empty.", is_error=True)
-            return
-
-        # Validate and auto-correct using shared validation logic
-        result = validate_and_correct(key, value)
-
-        # If result is a string, it's an error message
-        if isinstance(result, str):
-            self._show_feedback(result, is_error=True)
-            return
-
-        # If no settings_write_handler, fall back to original behavior
-        if self._settings_write_handler is None:
-            # Show auto-correction feedback if applicable
-            if result.was_corrected:
-                correction_msg = (
-                    f"Auto-corrected: '{result.original_input}' \u2192 '{result.value}'"
-                )
-                self._show_feedback(correction_msg, is_error=False, is_info=True)
-
-            # Write the setting to file directly
-            try:
-                write_result = SettingsParser.write_setting(
-                    self._config.settings_file_path, key, result.value
-                )
-            except Exception as e:
-                self._show_feedback(
-                    f"Error: File system error: {e}", is_error=True
-                )
-                return
-
-            if not write_result.valid:
-                error_msg = write_result.error_message or "Unknown write error."
-                self._show_feedback(f"Error: {error_msg}", is_error=True)
-                return
-
-            confirmation = f"Setting '{key}' set to '{result.value}' successfully."
-
-            try:
-                status = self._wrapper_core.get_status()
-                if status.server_state == ServerState.RUNNING:
-                    confirmation += (
-                        " Warning: Server is running. A restart is required "
-                        "for this change to take effect."
-                    )
-            except Exception:
-                pass
-
-            if result.was_corrected:
-                correction_msg = (
-                    f"Auto-corrected: '{result.original_input}' \u2192 '{result.value}'. "
-                )
-                self._show_feedback(correction_msg + confirmation, is_error=False, is_info=True)
-            else:
-                self._show_feedback(confirmation, is_error=False)
-
-            try:
-                self._on_setting_changed()
-            except Exception as e:
-                logger.error("Error in on_setting_changed callback: %s", e)
-            return
-
-        # Use SettingsWriteHandler for routing
-        validation_result, was_queued = self._settings_write_handler.submit(key, result.value)
-
-        if not validation_result.valid:
-            error_msg = validation_result.error_message or "Unknown error."
-            self._show_feedback(f"Error: {error_msg}", is_error=True)
-            return
-
-        if was_queued:
-            # Setting was queued (server is in unsafe state)
-            msg = f"Setting '{key}' queued as '{result.value}'. Will apply on server stop/restart."
-            if result.was_corrected:
-                correction_msg = (
-                    f"Auto-corrected: '{result.original_input}' \u2192 '{result.value}'. "
-                )
-                self._show_feedback(correction_msg + msg, is_error=False, is_info=True)
-            else:
-                self._show_feedback(msg, is_error=False, is_info=True)
-        else:
-            # Setting was written directly (server is in safe state)
-            confirmation = f"Setting '{key}' set to '{result.value}' successfully."
-            if result.was_corrected:
-                correction_msg = (
-                    f"Auto-corrected: '{result.original_input}' \u2192 '{result.value}'. "
-                )
-                self._show_feedback(correction_msg + confirmation, is_error=False, is_info=True)
-            else:
-                self._show_feedback(confirmation, is_error=False)
-
-        # Update pending indicator
-        self.update_pending_indicator()
-
-        # Trigger SettingsView refresh via the callback
-        try:
-            self._on_setting_changed()
-        except Exception as e:
-            logger.error("Error in on_setting_changed callback: %s", e)
-
-    def _show_feedback(
-        self, message: str, is_error: bool = False, is_info: bool = False
-    ) -> None:
-        """Display a feedback message in the feedback label.
-
-        Args:
-            message: The message to display.
-            is_error: If True, display in red color.
-            is_info: If True, display in blue/info color (for auto-correction).
-        """
-        if is_error:
-            self._feedback_label.configure(text=message, foreground="red")
-        elif is_info:
-            self._feedback_label.configure(text=message, foreground="blue")
-        else:
-            self._feedback_label.configure(text=message, foreground="green")
-
-    def update_pending_indicator(self) -> None:
-        """Update the pending indicator label based on queue state and server state.
-
-        Shows "N change(s) pending" when the pending queue is non-empty and
-        the server is in an unsafe state. Hides the indicator otherwise.
-        Also binds tooltip events for viewing pending entries.
-        """
-        if self._settings_write_handler is None:
-            return
-
-        try:
-            pending_queue = self._settings_write_handler._pending_queue
-            state = self._wrapper_core.get_status().server_state
-            count = pending_queue.count()
-
-            if count > 0 and state not in SettingsWriteHandler.SAFE_STATES:
-                text = f"{count} change(s) pending"
-                self._pending_indicator.configure(text=text)
-                self._pending_indicator.pack(fill="x", padx=5, pady=(0, 5))
-                # Bind tooltip events
-                self._pending_indicator.bind("<Enter>", self._show_pending_tooltip)
-                self._pending_indicator.bind("<Leave>", self._hide_pending_tooltip)
-            else:
-                self._pending_indicator.pack_forget()
-                self._pending_indicator.configure(text="")
-        except Exception as e:
-            logger.error("Error updating pending indicator: %s", e)
-
-    def _show_pending_tooltip(self, event: "tk.Event") -> None:
-        """Show tooltip with pending entries when hovering over the indicator."""
-        if self._settings_write_handler is None:
-            return
-
-        try:
-            pending_queue = self._settings_write_handler._pending_queue
-            entries = pending_queue.entries()
-            if not entries:
-                return
-
-            # Create tooltip window
-            self._tooltip = tk.Toplevel(self)
-            self._tooltip.wm_overrideredirect(True)
-            self._tooltip.wm_geometry(f"+{event.x_root + 10}+{event.y_root + 10}")
-
-            # Build tooltip content
-            lines = [f"{key} = {value}" for key, value in entries]
-            tooltip_text = "\n".join(lines)
-
-            label = ttk.Label(
-                self._tooltip,
-                text=tooltip_text,
-                background="#ffffe0",
-                relief="solid",
-                borderwidth=1,
-                padding=5,
-            )
-            label.pack()
-        except Exception:
-            pass
-
-    def _hide_pending_tooltip(self, event: "tk.Event") -> None:
-        """Hide the pending entries tooltip."""
-        if hasattr(self, "_tooltip") and self._tooltip is not None:
-            try:
-                self._tooltip.destroy()
-            except Exception:
-                pass
-            self._tooltip = None
+        close_button.grid(row=1, column=0, sticky="e", padx=10, pady=(5, 10))
