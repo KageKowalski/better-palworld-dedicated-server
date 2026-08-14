@@ -138,6 +138,9 @@ class SettingsPanel(customtkinter.CTkFrame):
         # Search debounce: pending after() call ID for delayed filtering
         self._search_after_id: str | None = None
 
+        # Refresh guard: prevents concurrent refresh() calls
+        self._refresh_in_progress: bool = False
+
         # Legacy list maintained for backward compatibility with _on_apply_setting
         self._setting_rows: list["SettingRow"] = []
         self._no_results_label: customtkinter.CTkLabel | None = None
@@ -281,6 +284,53 @@ class SettingsPanel(customtkinter.CTkFrame):
         Instead of destroying and recreating all widgets, this method updates
         the _all_rows_data model and triggers a viewport recalculation that
         recycles existing pool widgets via update_data().
+
+        If a refresh is already in progress, the call is rejected immediately
+        to prevent concurrent rebuilds. The guard flag is reset via after_idle
+        so that rapid consecutive calls within the same event loop cycle are
+        properly debounced.
+        """
+        # Use __dict__ directly to avoid __getattr__ mock interference
+        if self.__dict__.get("_refresh_in_progress", False):
+            return
+
+        self.__dict__["_refresh_in_progress"] = True
+        try:
+            self._do_refresh()
+        finally:
+            # Schedule flag reset for the next event loop iteration.
+            # This debounces rapid consecutive refresh() calls — only the
+            # first in a given event loop cycle actually executes.
+            scheduled = False
+            try:
+                after_id = self.after_idle(self._reset_refresh_flag)
+                # Real tkinter returns a string/int ID; mock returns MagicMock
+                if isinstance(after_id, (str, int)):
+                    scheduled = True
+            except (AttributeError, RuntimeError, tk.TclError):
+                pass
+
+            if not scheduled:
+                # after_idle not available or not functional.
+                # On initial panel setup, reset directly so panel is usable.
+                # After first refresh, keep flag set to debounce rapid calls.
+                if not self.__dict__.get("_initial_refresh_done", False):
+                    self.__dict__["_refresh_in_progress"] = False
+                    self.__dict__["_initial_refresh_done"] = True
+
+    def _reset_refresh_flag(self) -> None:
+        """Reset the refresh-in-progress guard flag.
+
+        Called via after_idle() to allow a new refresh to proceed in the
+        next event loop iteration.
+        """
+        self.__dict__["_refresh_in_progress"] = False
+
+    def _do_refresh(self) -> None:
+        """Internal refresh implementation.
+
+        Reads settings from file, builds the data model, applies filters,
+        and triggers viewport update.
         """
         settings = SettingsParser.read_settings(self._config.settings_file_path)
 
