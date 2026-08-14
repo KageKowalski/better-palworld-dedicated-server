@@ -135,6 +135,9 @@ class SettingsPanel(customtkinter.CTkFrame):
         self._viewport_start: int = 0
         self._viewport_end: int = 0
 
+        # Search debounce: pending after() call ID for delayed filtering
+        self._search_after_id: str | None = None
+
         # Legacy list maintained for backward compatibility with _on_apply_setting
         self._setting_rows: list["SettingRow"] = []
         self._no_results_label: customtkinter.CTkLabel | None = None
@@ -239,12 +242,38 @@ class SettingsPanel(customtkinter.CTkFrame):
         self._setting_rows = list(self._widget_pool)
 
     def _on_search_changed(self, *args) -> None:
-        """Trace callback for the search StringVar — limits length and filters."""
+        """Trace callback for the search StringVar — debounces filter invocation.
+
+        Enforces MAX_SEARCH_LENGTH immediately, then schedules filter_settings()
+        after 150ms of keyboard silence. Each keystroke cancels the pending
+        scheduled call and starts a fresh 150ms timer.
+        """
         current = self._search_var.get()
         if len(current) > self.MAX_SEARCH_LENGTH:
             self._search_var.set(current[: self.MAX_SEARCH_LENGTH])
             return
-        self.filter_settings(current)
+
+        # Cancel any pending debounced filter call
+        if self._search_after_id is not None:
+            self.after_cancel(self._search_after_id)
+            self._search_after_id = None
+
+        # Schedule filter_settings() after 150ms of keyboard silence
+        self._search_after_id = self.after(
+            150, self._execute_debounced_filter, current
+        )
+
+    def _execute_debounced_filter(self, search_text: str) -> None:
+        """Execute the debounced filter operation.
+
+        Called by the tkinter after() scheduler once 150ms have elapsed
+        since the last keystroke.
+
+        Args:
+            search_text: The search query to filter against.
+        """
+        self._search_after_id = None
+        self.filter_settings(search_text)
 
     def refresh(self) -> None:
         """Re-read settings file and rebuild the data model, then update viewport.
@@ -385,7 +414,12 @@ class SettingsPanel(customtkinter.CTkFrame):
                     self._setting_rows.append(proxy)
 
     def filter_settings(self, search_text: str) -> None:
-        """Show only settings matching the search text via viewport virtualization.
+        """Show only settings matching the search text via incremental updates.
+
+        Uses differential visibility: computes new visible set, compares with
+        current visible set, and only updates rows that changed state. Never
+        calls grid_remove() on ALL rows — only on rows that actually transition
+        between visible and hidden.
 
         Matches case-insensitively against the key name, description,
         and category. Updates the visible data subset and triggers
@@ -399,6 +433,12 @@ class SettingsPanel(customtkinter.CTkFrame):
             self._no_results_label.destroy()
             self._no_results_label = None
 
+        # Capture previous visible keys for differential comparison
+        prev_visible_keys: set[str] = {
+            r["key"] for r in self._visible_rows_data
+            if r["type"] == "setting" and r["key"] is not None
+        }
+
         if not search_text:
             # Show everything — reset visibility
             for row_data in self._all_rows_data:
@@ -406,6 +446,12 @@ class SettingsPanel(customtkinter.CTkFrame):
             self._visible_rows_data = list(self._all_rows_data)
         else:
             self._apply_visibility_filter(search_text)
+
+        # Compute new visible keys
+        new_visible_keys: set[str] = {
+            r["key"] for r in self._visible_rows_data
+            if r["type"] == "setting" and r["key"] is not None
+        }
 
         # Check if we have any visible settings
         visible_settings = [
@@ -437,19 +483,20 @@ class SettingsPanel(customtkinter.CTkFrame):
                     row.grid_remove()
             return
 
-        # Reset viewport and re-render with new visible subset
-        self._viewport_start = 0
-        self._viewport_end = 0
-        self._update_viewport(force=True)
+        # Determine if visibility actually changed
+        visibility_changed = prev_visible_keys != new_visible_keys
+
+        if visibility_changed:
+            # Reset viewport and re-render with new visible subset
+            self._viewport_start = 0
+            self._viewport_end = 0
+            self._update_viewport(force=True)
+        # If visibility didn't change, no viewport update needed
 
         # In no-pool mode, update proxy objects' grid state for test compat
         if not self._widget_pool:
-            visible_keys = {
-                r["key"] for r in self._visible_rows_data
-                if r["type"] == "setting"
-            }
             for row in self._setting_rows:
-                if row.key in visible_keys:
+                if row.key in new_visible_keys:
                     row.grid()
                 else:
                     row.grid_remove()
